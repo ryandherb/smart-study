@@ -13,6 +13,8 @@ export interface SessionRow {
   current_question_id: string | null;
   scaffold_stack: string;
   summary_md: string | null;
+  usage: string | null;
+  flow: string | null;
   created_at: number;
   updated_at: number;
 }
@@ -120,10 +122,17 @@ export function questionView(q: QuestionRow) {
 export function sessionSnapshot(sessionId: string) {
   const s = getSession(sessionId);
   if (!s) return null;
+  const fileNames = new Map(
+    db.query<{ id: string; name: string }, [string]>("SELECT id, name FROM files WHERE set_id = ?").all(s.set_id).map((f) => [f.id, f.name]),
+  );
+  const describePages = (pages: string | null) =>
+    pages
+      ? (JSON.parse(pages) as { fileId: string; page: number }[]).map((p) => `${fileNames.get(p.fileId)} p.${p.page}`).join(", ")
+      : null;
   const topics = listTopics(sessionId).map((t) => ({
     key: t.key,
     title: t.title,
-    sourcePages: t.source_pages,
+    sourcePages: describePages(t.pages) ?? t.source_pages,
     difficulty: t.difficulty,
     status: t.status,
   }));

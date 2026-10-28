@@ -36,6 +36,23 @@ export interface Message {
   created_at: number;
 }
 
+export interface LimitWindow {
+  utilization: number; // 0..1
+  resetsAt: number; // unix seconds
+}
+
+export interface Usage {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+  total: number;
+  costUSD: number;
+  lastContext: number;
+  fiveHourDelta: number;
+  limits: { fiveHour?: LimitWindow; sevenDay?: LimitWindow; status?: string; at: number } | null;
+}
+
 export interface Snapshot {
   id: string;
   set: { id: string; title: string };
@@ -51,6 +68,7 @@ export interface Snapshot {
   summaryMd: string | null;
   messages: Message[];
   busy: boolean;
+  usage: Usage;
 }
 
 export interface StudySet {
@@ -74,9 +92,8 @@ export interface Report extends Snapshot {
 }
 
 export const MODELS = [
-  { id: "", label: "Default" },
+  { id: "claude-sonnet-5-5", label: "Default (Sonnet 5.5)" },
   { id: "claude-opus-5-5", label: "Opus 5.5" },
-  { id: "claude-sonnet-5-5", label: "Sonnet 5.5" },
   { id: "claude-haiku-5-5", label: "Haiku 5.5" },
 ];
 

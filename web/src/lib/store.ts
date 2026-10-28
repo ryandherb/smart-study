@@ -50,6 +50,10 @@ export const useStudy = create<StudyState>((set, get) => ({
       const snap = get().snap;
       if (snap) set({ snap: { ...snap, busy } });
     });
+    on("usage", (usage) => {
+      const snap = get().snap;
+      if (snap) set({ snap: { ...snap, usage } });
+    });
     on("graded", (fb: Feedback) => {
       if (get().pinned?.question.id === fb.questionId) set({ feedback: fb });
     });

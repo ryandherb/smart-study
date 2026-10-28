@@ -21,7 +21,7 @@ sessions.post("/", async (c) => {
 sessions.get("/:id", (c) => {
   const snap = sessionSnapshot(c.req.param("id"));
   if (!snap) return c.notFound();
-  return c.json({ ...snap, busy: getTutor(snap.id).busy });
+  return c.json(getTutor(snap.id).snapshot());
 });
 
 sessions.delete("/:id", (c) => {
@@ -44,7 +44,7 @@ sessions.get("/:id/events", (c) => {
       alive = false;
       unsubscribe();
     });
-    await stream.writeSSE({ event: "snapshot", data: JSON.stringify({ ...sessionSnapshot(id), busy: tutor.busy }) });
+    await stream.writeSSE({ event: "snapshot", data: JSON.stringify(tutor.snapshot()) });
     while (alive) {
       await stream.sleep(15000);
       if (alive) await stream.writeSSE({ event: "ping", data: "{}" });
@@ -74,8 +74,8 @@ sessions.post("/:id/control", async (c) => {
   const id = c.req.param("id");
   const g = guard(id);
   if ("error" in g) return c.json({ error: g.error }, g.status);
-  const { kind, questionId } = await c.req.json<{ kind: "CONFUSED" | "SKIP" | "RESUME"; questionId: string }>();
-  if (!["CONFUSED", "SKIP", "RESUME"].includes(kind)) return c.json({ error: "Bad kind" }, 400);
+  const { kind, questionId } = await c.req.json<{ kind: "CONFUSED" | "SKIP"; questionId: string }>();
+  if (kind !== "CONFUSED" && kind !== "SKIP") return c.json({ error: "Bad kind" }, 400);
   getTutor(id).control(kind, questionId);
   return c.json({ ok: true });
 });
@@ -90,14 +90,12 @@ sessions.post("/:id/side", async (c) => {
   return c.json({ ok: true });
 });
 
-/** Re-kicks a session whose first turn failed (e.g. no topics yet). */
+/** Re-kicks a stalled session (failed plan or turn, no open question). */
 sessions.post("/:id/retry", (c) => {
   const id = c.req.param("id");
   const g = guard(id);
   if ("error" in g) return c.json({ error: g.error }, g.status);
-  const t = getTutor(id);
-  if (!g.s.sdk_session_id) t.begin();
-  else t.control("RESUME", g.s.current_question_id ?? "none");
+  getTutor(id).retry();
   return c.json({ ok: true });
 });
 

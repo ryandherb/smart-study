@@ -5,6 +5,18 @@ CREATE TABLE IF NOT EXISTS sets (
   created_at INTEGER NOT NULL
 );
 
+-- Topic plan for a set, made once by reading all its PDFs; every session copies it.
+CREATE TABLE IF NOT EXISTS set_topics (
+  set_id TEXT NOT NULL REFERENCES sets(id) ON DELETE CASCADE,
+  key TEXT NOT NULL,
+  title TEXT NOT NULL,
+  notes TEXT,
+  pages TEXT NOT NULL,                        -- JSON [{ fileId, page }] (1-based pages)
+  difficulty INTEGER,
+  order_idx INTEGER NOT NULL,
+  PRIMARY KEY (set_id, key)
+);
+
 CREATE TABLE IF NOT EXISTS files (
   id TEXT PRIMARY KEY,
   set_id TEXT NOT NULL REFERENCES sets(id) ON DELETE CASCADE,
@@ -24,6 +36,8 @@ CREATE TABLE IF NOT EXISTS sessions (
   current_question_id TEXT,
   scaffold_stack TEXT NOT NULL DEFAULT '[]',  -- JSON array of question ids waiting to be re-asked
   summary_md TEXT,
+  usage TEXT,                                  -- JSON SessionUsage (see tutor/usage.ts)
+  flow TEXT,                                   -- 'topic' once the session uses per-topic conversations
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
@@ -33,6 +47,9 @@ CREATE TABLE IF NOT EXISTS topics (
   key TEXT NOT NULL,
   title TEXT NOT NULL,
   source_pages TEXT,
+  notes TEXT,
+  pages TEXT,                                 -- JSON [{ fileId, page }]; null for pre-plan sessions (attach whole files)
+  outcome_note TEXT,
   difficulty INTEGER,
   status TEXT NOT NULL DEFAULT 'pending',     -- pending | active | mastered | struggled | skipped
   order_idx INTEGER NOT NULL,
