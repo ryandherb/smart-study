@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { z } from "zod";
 import { db } from "../db/db";
 import { loadUsage } from "./usage";
-import { updateSession } from "../db/repo";
+import { getSession, updateSession } from "../db/repo";
 
 type Block = { type: string; text?: string; title?: string; source?: { data?: string } };
 type History = { user: string; response: string }[];
@@ -44,6 +44,7 @@ export async function chatgptTurn(options: {
   executable?: string;
 }) {
   const { sessionId, topicKey, definition, signal } = options;
+  const model = getSession(sessionId)?.model;
   const dir = await mkdtemp(join(tmpdir(), "study-chatgpt-"));
   try {
     const { images, captions } = await material(options.blocks, dir);
@@ -59,6 +60,7 @@ export async function chatgptTurn(options: {
       const executable = options.executable ?? Bun.which("codex");
       if (!executable) throw new Error("Install OpenAI Codex CLI and run codex login.");
       const args = [executable, "exec", "--ignore-user-config", "--skip-git-repo-check", "--ephemeral", "--sandbox", "read-only", "--json", "--disable", "shell_tool", "--disable", "multi_agent", "--disable", "apps", "--disable", "plugins", "--disable", "hooks", "-c", 'web_search="disabled"', "-C", dir, "-o", output];
+      if (model) args.push("--model", model);
       for (const image of images) args.push("-i", image);
       args.push("-");
       const p = Bun.spawn(args, { stdin: "pipe", stdout: "pipe", stderr: "pipe" });

@@ -9,17 +9,25 @@ import { runTests, testSummary } from "../tutor/runner";
 
 export const sessions = new Hono();
 
+const DEFAULT_MODELS: Record<"claude" | "chatgpt", string> = {
+  "claude": "claude-sonnet-5-5",
+  "chatgpt": "gpt-6.1-sol",
+};
+
 sessions.post("/", async (c) => {
   const { setId, model, mode, provider = "claude" } = await c.req.json<{ setId: string; model?: string; mode?: string; provider?: string }>();
   if (provider !== "claude" && provider !== "chatgpt") return c.json({ error: "Unknown provider" }, 400);
-  if (provider === "chatgpt" && model) return c.json({ error: "ChatGPT uses the default Codex model" }, 400);
+  if (model !== undefined && typeof model !== "string") return c.json({ error: "Model must be a string" }, 400);
+  const resolvedModel = model?.trim() || DEFAULT_MODELS[provider];
+  if (provider === "chatgpt" && resolvedModel.startsWith("claude-")) return c.json({ error: "A Claude model cannot be used with ChatGPT" }, 400);
+  if (provider === "claude" && resolvedModel.startsWith("gpt-")) return c.json({ error: "A GPT model cannot be used with Claude" }, 400);
   const status = (await providerStatus()).find(p => p.id === provider)!;
   if (!status.available) return c.json({ error: status.hint }, 400);
   if (!db.query("SELECT 1 FROM sets WHERE id = ?").get(setId)) return c.json({ error: "Unknown set" }, 404);
   const id = newId();
   db.query(
     "INSERT INTO sessions (id, set_id, mode, model, provider, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-  ).run(id, setId, mode && MODES[mode] ? mode : "adaptive", model || null, provider, now(), now());
+  ).run(id, setId, mode && MODES[mode] ? mode : "adaptive", resolvedModel, provider, now(), now());
   getTutor(id).begin();
   return c.json({ id });
 });

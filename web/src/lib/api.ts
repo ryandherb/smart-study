@@ -95,7 +95,7 @@ export interface StudySet {
   createdAt: number;
   files: string[];
   latest: { total: number; mastered: number | null; struggled: number | null } | null;
-  sessions: { id: string; status: string; created_at: number; updated_at: number }[];
+  sessions: { id: string; status: string; created_at: number; updated_at: number; provider: "claude" | "chatgpt"; model: string | null }[];
 }
 
 export interface Report extends Snapshot {

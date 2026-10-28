@@ -25,7 +25,7 @@ sets.get("/", (c) => {
      WHERE se.id = (SELECT id FROM sessions WHERE set_id = ? ORDER BY updated_at DESC LIMIT 1)`,
   );
   const sessions = db.query<any, [string]>(
-    "SELECT id, status, created_at, updated_at FROM sessions WHERE set_id = ? ORDER BY updated_at DESC",
+    "SELECT id, status, created_at, updated_at, provider, model FROM sessions WHERE set_id = ? ORDER BY updated_at DESC",
   );
   return c.json(
     rows.map((r) => ({

@@ -234,6 +234,12 @@ export default function Library() {
                         <p className="mt-1 text-xs text-zinc-400">
                           {s.latest?.total ? `${s.latest.total} topics · ` : ""}
                           {s.sessions.length} session{s.sessions.length === 1 ? "" : "s"}
+                          {" · "}
+                          {latest?.provider && latest.model ?
+                            `${latest.provider}, ${latest.model}` :
+                            "Provider or model unknown"
+                          }
+
                         </p>
                       </div>
                       <button

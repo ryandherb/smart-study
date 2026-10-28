@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, test } from "bun:test";
+import { afterAll, beforeAll, expect, test, spyOn } from "bun:test";
 import { mkdtemp, mkdir, chmod, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -19,7 +19,7 @@ const { fileBlocks } = await import("../src/tutor/pages");
 beforeAll(async () => {
   await mkdir(bin);
   const bun = process.execPath;
-  await Bun.write(join(bin, "mock-codex.js"), `#!${bun}\nconst args = process.argv.slice(2);\nif (args[0] === 'login') { console.error('Logged in using ChatGPT'); process.exit(0); }\nconst prompt = await Bun.stdin.text();\nawait Bun.write(${JSON.stringify(join(dir, "last-prompt"))}, prompt);\nawait Bun.write(args[args.indexOf('-o') + 1], await Bun.file(${JSON.stringify(responseFile)}).text());\nconsole.log(JSON.stringify({type:'turn.completed', usage:{input_tokens:100, cached_input_tokens:30, output_tokens:20}}));\n`);
+  await Bun.write(join(bin, "mock-codex.js"), `#!${bun}\nconst args = process.argv.slice(2);\nawait Bun.write(${JSON.stringify(join(dir, "last-args"))}, JSON.stringify(args));\nif (args[0] === 'login') { console.error('Logged in using ChatGPT'); process.exit(0); }\nconst prompt = await Bun.stdin.text();\nawait Bun.write(${JSON.stringify(join(dir, "last-prompt"))}, prompt);\nawait Bun.write(args[args.indexOf('-o') + 1], await Bun.file(${JSON.stringify(responseFile)}).text());\nconsole.log(JSON.stringify({type:'turn.completed', usage:{input_tokens:100, cached_input_tokens:30, output_tokens:20}}));\n`);
   await chmod(join(bin, "mock-codex.js"), 0o755);
 
   db.query("INSERT INTO sets VALUES (?, ?, ?)").run("set", "Study", Date.now());
@@ -101,6 +101,53 @@ test("session API rejects unknown providers and cross-provider models", async ()
   expect(unknown.status).toBe(400);
   const wrongModel = await request({ setId: "set", provider: "chatgpt", model: "claude-sonnet-5-5" });
   expect(wrongModel.status).toBe(400);
+});
+
+test("new sessions store defaults and Study again can reuse the stored model", async () => {
+  const providers = await import("../src/tutor/providers");
+  const { Tutor, dropTutor } = await import("../src/tutor/agent");
+  const { sessions } = await import("../src/routes/sessions");
+  const { sets } = await import("../src/routes/sets");
+  const status = spyOn(providers, "providerStatus").mockResolvedValue([
+    { id: "claude", available: true, label: "Claude", hint: "" },
+    { id: "chatgpt", available: true, label: "ChatGPT", hint: "" },
+  ]);
+  const begin = spyOn(Tutor.prototype, "begin").mockResolvedValue(undefined);
+  const ids: string[] = [];
+  try {
+    for (const [provider, requested, expected] of [
+      ["claude", undefined, "claude-sonnet-5-5"],
+      ["chatgpt", undefined, "gpt-6.1-sol"],
+      ["chatgpt", "gpt-6.1-sol", "gpt-6.1-sol"],
+      ["claude", "claude-opus-5-5", "claude-opus-5-5"],
+      ["chatgpt", "  ", "gpt-6.1-sol"],
+    ]) {
+      const response = await sessions.request("/", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ setId: "set", provider, model: requested }) });
+      expect(response.status).toBe(200);
+      const { id } = await response.json() as { id: string };
+      ids.push(id);
+      expect(getSession(id)!.model).toBe(expected!);
+      const listing = await (await sets.request("/")).json() as { sessions: { id: string; model: string; provider: string }[] }[];
+      expect(listing[0]!.sessions.find(s => s.id === id)).toMatchObject({ model: expected, provider });
+    }
+  } finally {
+    begin.mockRestore();
+    status.mockRestore();
+    for (const id of ids) { dropTutor(id); db.query("DELETE FROM sessions WHERE id = ?").run(id); }
+  }
+});
+
+test("Codex receives the saved model and legacy sessions still use its default", async () => {
+  const { definition } = createTopicServer("session", () => {}, { onTurnOk: () => {}, onFinishTopic: () => {} });
+  await respond({ text: "Explanation" });
+  db.query("UPDATE sessions SET model = ? WHERE id = ?").run("gpt-6.1-sol", "session");
+  try {
+    await turn(definition, undefined, true);
+    const args = JSON.parse(await Bun.file(join(dir, "last-args")).text()) as string[];
+    expect(args[args.indexOf("--model") + 1]).toBe("gpt-6.1-sol");
+  } finally { db.query("UPDATE sessions SET model = NULL WHERE id = ?").run("session"); }
+  await turn(definition, undefined, true);
+  expect(JSON.parse(await Bun.file(join(dir, "last-args")).text())).not.toContain("--model");
 });
 
 test("returning to the original and finishing uses the shared tutor state", async () => {
