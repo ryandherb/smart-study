@@ -34,3 +34,9 @@ export const now = () => Date.now();
 
 addColumn("sessions", "provider", "TEXT NOT NULL DEFAULT 'claude'");
 db.exec(`CREATE TABLE IF NOT EXISTS provider_history (session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE, topic_key TEXT NOT NULL, history TEXT NOT NULL, PRIMARY KEY(session_id, topic_key))`);
+db.exec(`CREATE TABLE IF NOT EXISTS study_time (
+  set_id TEXT NOT NULL REFERENCES sets(id) ON DELETE CASCADE,
+  tracker_id TEXT NOT NULL,
+  elapsed_ms INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (set_id, tracker_id)
+)`);

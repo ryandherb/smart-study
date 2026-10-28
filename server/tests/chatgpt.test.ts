@@ -163,3 +163,27 @@ test("returning to the original and finishing uses the shared tutor state", asyn
   expect(finished).toBe(true);
   expect(getSession("session")!.current_question_id).toBeNull();
 });
+
+test("study time persists per set and retries or older reports do not double count", async () => {
+  const { sets } = await import("../src/routes/sets");
+  const report = (setId: string, body: unknown) => sets.request(`/${setId}/time`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  });
+  db.query("INSERT INTO sets VALUES (?, ?, ?)").run("timed-set", "Timed", 0);
+  try {
+    expect(await (await report("timed-set", { trackerId: "tab-1", elapsedMs: 1000 })).json()).toEqual({ studyTimeMs: 1000 });
+    expect(await (await report("timed-set", { trackerId: "tab-1", elapsedMs: 1000 })).json()).toEqual({ studyTimeMs: 1000 });
+    expect(await (await report("timed-set", { trackerId: "tab-1", elapsedMs: 500 })).json()).toEqual({ studyTimeMs: 1000 });
+    expect(await (await report("timed-set", { trackerId: "tab-1", elapsedMs: 2500 })).json()).toEqual({ studyTimeMs: 2500 });
+    expect(await (await report("timed-set", { trackerId: "tab-2", elapsedMs: 700 })).json()).toEqual({ studyTimeMs: 3200 });
+    const listing = await (await sets.request("/")).json() as { id: string; studyTimeMs: number }[];
+    expect(listing.find(s => s.id === "timed-set")!.studyTimeMs).toBe(3200);
+    expect(listing.find(s => s.id === "set")!.studyTimeMs).toBe(0);
+    for (const elapsedMs of [-1, 1.5, "100", null, Number.MAX_SAFE_INTEGER + 1]) {
+      expect((await report("timed-set", { trackerId: "tab-1", elapsedMs })).status).toBe(400);
+    }
+    expect((await report("missing", { trackerId: "tab", elapsedMs: 0 })).status).toBe(404);
+    db.query("DELETE FROM sets WHERE id = ?").run("timed-set");
+    expect(db.query<{ n: number }, []>("SELECT COUNT(*) AS n FROM study_time WHERE set_id = 'timed-set'").get()!.n).toBe(0);
+  } finally { db.query("DELETE FROM sets WHERE id = ?").run("timed-set"); }
+});

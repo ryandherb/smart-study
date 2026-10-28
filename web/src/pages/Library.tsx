@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button, ThemeToggle } from "../components/ui";
 import { api, MODELS, MODES, type ProviderStatus, type StudySet } from "../lib/api";
+import { formatStudyTime } from "../components/StudyTimer";
 
 function MasteryRing({ mastered, struggled, total }: { mastered: number; struggled: number; total: number }) {
   const r = 22;
@@ -234,6 +235,7 @@ export default function Library() {
                         <p className="mt-1 text-xs text-zinc-400">
                           {s.latest?.total ? `${s.latest.total} topics · ` : ""}
                           {s.sessions.length} session{s.sessions.length === 1 ? "" : "s"}
+                          {" · "}{formatStudyTime(s.studyTimeMs)} studied
                           {" · "}
                           {latest?.provider && latest.model ?
                             `${latest.provider}, ${latest.model}` :

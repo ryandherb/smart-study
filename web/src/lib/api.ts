@@ -93,6 +93,7 @@ export interface StudySet {
   id: string;
   title: string;
   createdAt: number;
+  studyTimeMs: number;
   files: string[];
   latest: { total: number; mastered: number | null; struggled: number | null } | null;
   sessions: { id: string; status: string; created_at: number; updated_at: number; provider: "claude" | "chatgpt"; model: string | null }[];
@@ -143,6 +144,10 @@ export interface ProviderStatus {
 export const api = {
   providers: () => req<ProviderStatus[]>("/providers"),
   listSets: () => req<StudySet[]>("/sets"),
+  saveStudyTime: (setId: string, trackerId: string, elapsedMs: number) =>
+    req<{ studyTimeMs: number }>(`/sets/${setId}/time`, {
+      ...json("POST", { trackerId, elapsedMs }), keepalive: true,
+    }),
   createSet: (files: File[], title: string) => {
     const form = new FormData();
     files.forEach((f) => form.append("files", f));

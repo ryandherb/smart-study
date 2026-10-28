@@ -11,6 +11,7 @@ sets.get("/", (c) => {
   const rows = db
     .query<any, []>(
       `SELECT s.id, s.title, s.created_at,
+        (SELECT COALESCE(SUM(elapsed_ms), 0) FROM study_time WHERE set_id = s.id) AS study_time_ms,
         (SELECT COUNT(*) FROM files f WHERE f.set_id = s.id) AS file_count,
         (SELECT json_group_array(name) FROM files f WHERE f.set_id = s.id) AS file_names
        FROM sets s ORDER BY s.created_at DESC`,
@@ -32,11 +33,30 @@ sets.get("/", (c) => {
       id: r.id,
       title: r.title,
       createdAt: r.created_at,
+      studyTimeMs: r.study_time_ms,
       files: JSON.parse(r.file_names),
       latest: stats.get(r.id),
       sessions: sessions.all(r.id),
     })),
   );
+});
+
+// Each browser tracker reports a cumulative total, so retries cannot count time twice.
+sets.post("/:id/time", async (c) => {
+  const id = c.req.param("id");
+  const body = await c.req.json().catch(() => null);
+  if (!body || typeof body.trackerId !== "string" || !/^[a-zA-Z0-9-]{1,64}$/.test(body.trackerId)
+    || !Number.isSafeInteger(body.elapsedMs) || body.elapsedMs < 0) {
+    return c.json({ error: "Invalid study time" }, 400);
+  }
+  if (!db.query("SELECT 1 FROM sets WHERE id = ?").get(id)) return c.json({ error: "Unknown set" }, 404);
+  db.query(`INSERT INTO study_time (set_id, tracker_id, elapsed_ms) VALUES (?, ?, ?)
+    ON CONFLICT (set_id, tracker_id) DO UPDATE SET elapsed_ms = MAX(elapsed_ms, excluded.elapsed_ms)`)
+    .run(id, body.trackerId, body.elapsedMs);
+  const total = db.query<{ studyTimeMs: number }, [string]>(
+    "SELECT COALESCE(SUM(elapsed_ms), 0) AS studyTimeMs FROM study_time WHERE set_id = ?",
+  ).get(id)!;
+  return c.json(total);
 });
 
 sets.post("/", async (c) => {

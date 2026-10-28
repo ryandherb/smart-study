@@ -14,6 +14,7 @@ import { UsageBar } from "../components/UsageBar";
 import { Button, ThemeToggle, ThinkingDots } from "../components/ui";
 import { api, MODES } from "../lib/api";
 import { useStudy } from "../lib/store";
+import { StudyTimer } from "../components/StudyTimer";
 
 function Loading({ title, subtitle }: { title: string; subtitle: string }) {
   return (
@@ -73,6 +74,7 @@ export default function Study() {
           </Link>
           <div className="h-5 w-px bg-zinc-200 dark:bg-white/10" />
           <h1 className="truncate font-semibold">{snap.set.title}</h1>
+          {snap.id === id && <StudyTimer key={snap.set.id} setId={snap.set.id} active={snap.status === "active"} />}
           {modeLabel && (
             <span className="hidden rounded-full bg-accent-500/10 px-2 py-0.5 text-xs font-medium text-accent-700 sm:inline dark:text-accent-300">
               {modeLabel}
