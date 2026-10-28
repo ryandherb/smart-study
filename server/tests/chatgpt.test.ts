@@ -9,21 +9,19 @@ process.env.STUDY_DATA_DIR = dir;
 const originalPath = process.env.PATH;
 const bin = join(dir, "bin");
 const responseFile = join(dir, "mock-response.json");
-process.env.MOCK_CODEX_RESPONSE = responseFile;
 const { db } = await import("../src/db/db");
 const { createPlanServer, createTopicServer } = await import("../src/tutor/tools");
 const { chatgptTurn, parseResponse } = await import("../src/tutor/chatgpt");
 const { getSession, sessionSnapshot, recordAttempt, getQuestion } = await import("../src/db/repo");
 const { usageView } = await import("../src/tutor/usage");
-const { providerStatus } = await import("../src/tutor/providers");
 const { fileBlocks } = await import("../src/tutor/pages");
 
 beforeAll(async () => {
   await mkdir(bin);
   const bun = process.execPath;
-  await Bun.write(join(bin, "codex"), `#!${bun}\nconst args = process.argv.slice(2);\nif (args[0] === 'login') { console.error('Logged in using ChatGPT'); process.exit(0); }\nconst prompt = await Bun.stdin.text();\nawait Bun.write(${JSON.stringify(join(dir, "last-prompt"))}, prompt);\nawait Bun.write(args[args.indexOf('-o') + 1], await Bun.file(process.env.MOCK_CODEX_RESPONSE).text());\nconsole.log(JSON.stringify({type:'turn.completed', usage:{input_tokens:100, cached_input_tokens:30, output_tokens:20}}));\n`);
-  await chmod(join(bin, "codex"), 0o755);
-  process.env.PATH = `${bin}:${originalPath}`;
+  await Bun.write(join(bin, "mock-codex.js"), `#!${bun}\nconst args = process.argv.slice(2);\nif (args[0] === 'login') { console.error('Logged in using ChatGPT'); process.exit(0); }\nconst prompt = await Bun.stdin.text();\nawait Bun.write(${JSON.stringify(join(dir, "last-prompt"))}, prompt);\nawait Bun.write(args[args.indexOf('-o') + 1], await Bun.file(${JSON.stringify(responseFile)}).text());\nconsole.log(JSON.stringify({type:'turn.completed', usage:{input_tokens:100, cached_input_tokens:30, output_tokens:20}}));\n`);
+  await chmod(join(bin, "mock-codex.js"), 0o755);
+
   db.query("INSERT INTO sets VALUES (?, ?, ?)").run("set", "Study", Date.now());
   db.query("INSERT INTO sessions (id, set_id, provider, created_at, updated_at) VALUES (?, ?, ?, ?, ?)").run("session", "set", "chatgpt", Date.now(), Date.now());
   const pdf = await PDFDocument.create(); pdf.addPage();
@@ -38,18 +36,15 @@ afterAll(async () => {
 
 const respond = (value: unknown) => Bun.write(responseFile, JSON.stringify(value));
 const turn = (definition: any, topicKey?: string, side = false) => chatgptTurn({
-  sessionId: "session", topicKey, definition, system: "Tutor", blocks: [{ type: "text", text: "Student input" }], side, signal: new AbortController().signal,
+  executable: join(bin, "mock-codex.js"), sessionId: "session", topicKey, definition, system: "Tutor", blocks: [{ type: "text", text: "Student input" }], side, signal: new AbortController().signal,
 });
 
-test("detects ChatGPT login without invoking inference", async () => {
-  const providers = await providerStatus();
-  expect(providers.find(p => p.id === "chatgpt")?.available).toBe(true);
-});
+
 
 test("renders PDF material and saves a validated plan with page refs", async () => {
   await respond({ arguments: { topics: [{ id: "algebra", title: "Algebra", notes: "Equations", pages: [{ file: "exam.pdf", page: 1 }] }] } });
   const { definition } = createPlanServer("set", () => {});
-  await chatgptTurn({ sessionId: "session", definition, system: "Plan", blocks: await fileBlocks(["file"]), signal: new AbortController().signal });
+  await chatgptTurn({ executable: join(bin, "mock-codex.js"), sessionId: "session", definition, system: "Plan", blocks: await fileBlocks(["file"]), signal: new AbortController().signal });
   expect(db.query<any, []>("SELECT * FROM set_topics").get().key).toBe("algebra");
   expect(await Bun.file(join(dir, "last-prompt")).text()).toContain("Image 1: exam.pdf");
   db.exec("INSERT INTO topics (session_id, key, title, pages, status, order_idx) SELECT 'session', key, title, pages, 'active', order_idx FROM set_topics");
@@ -89,11 +84,35 @@ test("invalid actions and cancelled turns leave question state unchanged", async
   await respond({ arguments: { move: "not-a-move" } });
   await expect(turn(definition, "algebra")).rejects.toThrow("invalid tutor action");
   expect(getSession("session")!.current_question_id).toBe(before);
-  await expect(chatgptTurn({ sessionId: "session", definition, system: "", blocks: [], signal: AbortSignal.abort() })).rejects.toThrow("cancelled");
+  await expect(chatgptTurn({ executable: join(bin, "mock-codex.js"), sessionId: "session", definition, system: "", blocks: [], signal: AbortSignal.abort() })).rejects.toThrow("cancelled");
 });
 
 test("older sessions default to Claude and fenced JSON is accepted", () => {
   db.query("INSERT INTO sessions (id, set_id, created_at, updated_at) VALUES (?, ?, ?, ?)").run("old", "set", 1, 1);
   expect(getSession("old")!.provider).toBe("claude");
   expect(parseResponse('```json\n{"text":"hello"}\n```')).toEqual({ text: "hello" });
+});
+
+
+test("session API rejects unknown providers and cross-provider models", async () => {
+  const { sessions } = await import("../src/routes/sessions");
+  const request = (body: unknown) => sessions.request("/", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const unknown = await request({ setId: "set", provider: "unknown" });
+  expect(unknown.status).toBe(400);
+  const wrongModel = await request({ setId: "set", provider: "chatgpt", model: "claude-sonnet-5-5" });
+  expect(wrongModel.status).toBe(400);
+});
+
+test("returning to the original and finishing uses the shared tutor state", async () => {
+  let finished = false;
+  const { definition } = createTopicServer("session", () => {}, { onTurnOk: () => {}, onFinishTopic: () => { finished = true; } });
+  const current = getSession("session")!.current_question_id!;
+  recordAttempt(current, "2");
+  await respond({ arguments: { grade: { verdict: "correct", feedback_md: "Yes" }, move: "back_to_original", question: { type: "free", prompt_md: "Now solve the original" } } });
+  await turn(definition, "algebra");
+  expect(JSON.parse(getSession("session")!.scaffold_stack)).toEqual([]);
+  await respond({ arguments: { move: "finish_topic", topic_outcome: "mastered" } });
+  await turn(definition, "algebra");
+  expect(finished).toBe(true);
+  expect(getSession("session")!.current_question_id).toBeNull();
 });

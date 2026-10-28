@@ -1,9 +1,10 @@
 export type Provider = "claude" | "chatgpt";
 
 async function loggedIn(command: string[]) {
-  if (!Bun.which(command[0]!)) return false;
+  const executable = Bun.which(command[0]!, { PATH: process.env.PATH });
+  if (!executable) return false;
   try {
-    const p = Bun.spawn(command, { stdout: "pipe", stderr: "pipe" });
+    const p = Bun.spawn([executable, ...command.slice(1)], { stdout: "pipe", stderr: "pipe" });
     const timer = setTimeout(() => p.kill(), 5000);
     try {
       const [stdout, stderr, code] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text(), p.exited]);
