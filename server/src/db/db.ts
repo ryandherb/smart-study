@@ -20,6 +20,9 @@ addColumn("sessions", "flow", "TEXT"); // 'topic' = per-topic conversations; nul
 addColumn("topics", "notes", "TEXT");
 addColumn("topics", "pages", "TEXT");
 addColumn("topics", "outcome_note", "TEXT");
+addColumn("topics", "sdk_session_id", "TEXT");
+addColumn("topics", "current_question_id", "TEXT");
+addColumn("topics", "scaffold_stack", "TEXT");
 
 export const newId = () => crypto.randomUUID();
 export const now = () => Date.now();

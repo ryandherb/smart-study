@@ -19,6 +19,7 @@ interface StudyState {
   submit: (answer: string) => Promise<void>;
   control: (kind: "CONFUSED" | "SKIP") => Promise<void>;
   ask: (text: string) => Promise<void>;
+  jump: (topicKey: string) => Promise<void>;
   continueOn: () => void;
   clearError: () => void;
 }
@@ -102,6 +103,18 @@ export const useStudy = create<StudyState>((set, get) => ({
       await api.side(snap.id, text);
     } catch (e) {
       set({ error: (e as Error).message });
+    }
+  },
+
+  async jump(topicKey) {
+    const { snap } = get();
+    if (!snap || snap.busy || snap.currentTopic === topicKey) return;
+    // Highlight the new topic right away; the server's snapshot fills in its question.
+    set({ pinned: null, feedback: null, scaffold: null, snap: { ...snap, busy: true, currentTopic: topicKey, current: null, stack: [] } });
+    try {
+      await api.jumpTopic(snap.id, topicKey);
+    } catch (e) {
+      set({ error: (e as Error).message, snap: { ...get().snap!, busy: false } });
     }
   },
 

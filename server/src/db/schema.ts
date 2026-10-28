@@ -50,8 +50,11 @@ CREATE TABLE IF NOT EXISTS topics (
   notes TEXT,
   pages TEXT,                                 -- JSON [{ fileId, page }]; null for pre-plan sessions (attach whole files)
   outcome_note TEXT,
+  sdk_session_id TEXT,                        -- this topic's conversation, resumed when the student comes back
+  current_question_id TEXT,                   -- open question saved when the student jumps away
+  scaffold_stack TEXT,                        -- scaffold stack saved when the student jumps away
   difficulty INTEGER,
-  status TEXT NOT NULL DEFAULT 'pending',     -- pending | active | mastered | struggled | skipped
+  status TEXT NOT NULL DEFAULT 'pending',     -- pending | active | paused | mastered | struggled | skipped
   order_idx INTEGER NOT NULL,
   PRIMARY KEY (session_id, key)
 );

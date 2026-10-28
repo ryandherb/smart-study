@@ -37,7 +37,7 @@ function Loading({ title, subtitle }: { title: string; subtitle: string }) {
 export default function Study() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { snap, pinned, feedback, scaffold, error, connect, submit, control, ask, continueOn, clearError } = useStudy();
+  const { snap, pinned, feedback, scaffold, error, connect, submit, control, ask, jump, continueOn, clearError } = useStudy();
   const [panel, setPanel] = useState<PanelTab | null>(null);
 
   useEffect(() => connect(id!), [id, connect]);
@@ -73,6 +73,22 @@ export default function Study() {
               {done}/{snap.topics.length} topics
             </span>
           )}
+          {snap.topics.length > 0 && (
+            // Topic picker for narrow windows, where the topic sidebar is hidden.
+            <select
+              value={snap.currentTopic ?? ""}
+              disabled={snap.busy}
+              onChange={(e) => jump(e.target.value)}
+              className="max-w-48 truncate rounded-lg border border-zinc-200 bg-white px-2 py-1 text-xs outline-none disabled:opacity-60 lg:hidden dark:border-white/10 dark:bg-zinc-900"
+              aria-label="Jump to topic"
+            >
+              {snap.topics.map((t) => (
+                <option key={t.key} value={t.key}>
+                  {t.title}
+                </option>
+              ))}
+            </select>
+          )}
           <span className="flex-1" />
           {snap.busy && <ThinkingDots label="Tutor is thinking" />}
           <Button variant={panel === "source" ? "secondary" : "ghost"} size="sm" onClick={() => setPanel(panel === "source" ? null : "source")}>
@@ -93,7 +109,9 @@ export default function Study() {
       <div className="flex min-h-0 flex-1 gap-6 px-4 py-6 lg:px-6">
         {/* topics */}
         <aside className="hidden w-60 shrink-0 overflow-y-auto lg:block">
-          {snap.topics.length > 0 && <TopicRail topics={snap.topics} />}
+          {snap.topics.length > 0 && (
+            <TopicRail topics={snap.topics} current={snap.currentTopic} busy={snap.busy} onSelect={jump} />
+          )}
         </aside>
 
         {/* main */}
@@ -132,7 +150,7 @@ export default function Study() {
             ) : !shown ? (
               snap.busy ? (
                 snap.topics.length ? (
-                  <Loading title="Starting the next topic" subtitle="Loading just this topic's pages…" />
+                  <Loading title={topic ? `Starting: ${topic.title}` : "Starting the next topic"} subtitle="Loading just this topic's pages…" />
                 ) : (
                   <Loading title="Reading your material" subtitle="Mapping out topics. This happens once per study set." />
                 )

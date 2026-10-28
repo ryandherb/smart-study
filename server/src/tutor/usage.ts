@@ -25,8 +25,8 @@ export interface SessionUsage {
   fiveHourDelta: number;
   lastFiveHour?: LimitWindow;
   limits?: AccountLimits;
-  /** Running totals of the current SDK conversation, to turn its cumulative results into increments. */
-  conversation?: Pick<SessionUsage, "input" | "output" | "cacheRead" | "cacheWrite" | "costUSD">;
+  /** Last running totals per SDK conversation (by its session id), to turn cumulative results into increments. */
+  conversations?: Record<string, Pick<SessionUsage, "input" | "output" | "cacheRead" | "cacheWrite" | "costUSD">>;
 }
 
 const empty = (): SessionUsage => ({
@@ -53,25 +53,23 @@ const save = (sessionId: string, u: SessionUsage) => updateSession(sessionId, { 
 export function usageView(sessionId: string) {
   const u = loadUsage(sessionId);
   const limits = [latestLimits, u.limits].filter(Boolean).sort((a, b) => b!.at - a!.at)[0] ?? null;
-  const { lastFiveHour, limits: _, conversation, ...totals } = u;
+  const { lastFiveHour, limits: _, conversations, ...totals } = u;
   return { ...totals, total: u.input + u.output + u.cacheRead + u.cacheWrite, limits };
 }
 
 type Totals = Pick<SessionUsage, "input" | "output" | "cacheRead" | "cacheWrite" | "costUSD">;
 const zero = (): Totals => ({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, costUSD: 0 });
 
-/** Call when a new SDK conversation starts (planning, or a new topic): its running totals start from zero. */
-export function resetConversation(sessionId: string) {
-  const u = loadUsage(sessionId);
-  u.conversation = zero();
-  save(sessionId, u);
-}
-
 /**
- * A result's modelUsage/total_cost_usd are running totals for the current conversation
- * (carried over when it is resumed), so add only the increase since the last result.
+ * A result's modelUsage/total_cost_usd are running totals for its conversation (carried over
+ * when the conversation is resumed), so add only the increase since that conversation's last result.
  */
-export function recordResult(sessionId: string, modelUsage: Record<string, ModelUsage>, costUSD: number) {
+export function recordResult(
+  sessionId: string,
+  conversationId: string,
+  modelUsage: Record<string, ModelUsage>,
+  costUSD: number,
+) {
   const models = Object.values(modelUsage);
   if (!models.length) return;
   const sum = (k: keyof ModelUsage) => models.reduce((n, m) => n + ((m[k] as number) ?? 0), 0);
@@ -83,12 +81,13 @@ export function recordResult(sessionId: string, modelUsage: Record<string, Model
     costUSD,
   };
   const u = loadUsage(sessionId);
-  const prev = u.conversation ?? zero();
+  u.conversations ??= {};
+  const prev = u.conversations[conversationId] ?? zero();
   for (const k of Object.keys(now) as (keyof Totals)[]) {
     // A drop means the running total restarted (e.g. resumed without saved totals): count it all.
     u[k] += now[k] >= prev[k] ? now[k] - prev[k] : now[k];
   }
-  u.conversation = now;
+  u.conversations[conversationId] = now;
   save(sessionId, u);
 }
 

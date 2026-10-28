@@ -90,6 +90,18 @@ sessions.post("/:id/side", async (c) => {
   return c.json({ ok: true });
 });
 
+/** Jump to another topic; the current one is paused and can be resumed later. */
+sessions.post("/:id/topic", async (c) => {
+  const id = c.req.param("id");
+  const g = guard(id);
+  if ("error" in g) return c.json({ error: g.error }, g.status);
+  const { key } = await c.req.json<{ key: string }>();
+  if (!db.query("SELECT 1 FROM topics WHERE session_id = ? AND key = ?").get(id, key))
+    return c.json({ error: "Unknown topic" }, 404);
+  void getTutor(id).jumpTo(key);
+  return c.json({ ok: true });
+});
+
 /** Re-kicks a stalled session (failed plan or turn, no open question). */
 sessions.post("/:id/retry", (c) => {
   const id = c.req.param("id");

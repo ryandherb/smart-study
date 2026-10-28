@@ -65,7 +65,7 @@ export function UsageBar({ usage, busy }: { usage: Usage; busy: boolean }) {
 
   return (
     <footer className="fixed inset-x-0 bottom-0 z-30 border-t border-zinc-200/70 bg-zinc-50/80 backdrop-blur dark:border-white/5 dark:bg-zinc-950/70">
-      <div className="flex h-10 items-center gap-5 overflow-x-auto px-4 text-xs whitespace-nowrap">
+      <div className="flex h-10 items-center gap-5 overflow-x-auto px-4 text-xs whitespace-nowrap [scrollbar-width:none]">
         <div className="flex items-center gap-2" title={detail}>
           <Gauge className={clsx("size-4", busy ? "animate-pulse text-accent-500" : "text-zinc-400")} />
           <span className="text-zinc-500">This quiz</span>

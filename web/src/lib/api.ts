@@ -19,7 +19,7 @@ export interface Topic {
   title: string;
   sourcePages: string | null;
   difficulty: number | null;
-  status: "pending" | "active" | "mastered" | "struggled" | "skipped";
+  status: "pending" | "active" | "paused" | "mastered" | "struggled" | "skipped";
 }
 
 export interface Feedback {
@@ -130,4 +130,5 @@ export const api = {
     req(`/sessions/${id}/control`, json("POST", { kind, questionId })),
   side: (id: string, text: string) => req(`/sessions/${id}/side`, json("POST", { text })),
   retry: (id: string) => req(`/sessions/${id}/retry`, { method: "POST" }),
+  jumpTopic: (id: string, key: string) => req(`/sessions/${id}/topic`, json("POST", { key })),
 };

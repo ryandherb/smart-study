@@ -9,7 +9,8 @@ Local study app: you upload PDFs (exams and slides), and Claude tutors you one q
 ## How tutoring works (server/src/tutor/)
 - `agent.ts` handles orchestration:
   1. **The plan** happens once per study set. Claude reads every PDF and calls `save_plan`, which fills `set_topics` with page refs. Later sessions copy this plan, so it isn't regenerated.
-  2. **Then one SDK conversation runs per topic.** It gets only that topic's pages (`pages.ts` splits the PDFs with pdf-lib) and a short brief. `finish_topic` closes the conversation and starts the next one.
+  2. **Then one SDK conversation runs per topic.** It gets only that topic's pages (`pages.ts` splits the PDFs with pdf-lib) and a short brief. `finish_topic` closes the conversation and starts the next unfinished topic.
+  3. **The student can jump between topics at any time** (`jumpTo`). The topic they leave is saved on its `topics` row (conversation id, open question, scaffold stack) and restored on return. Returning to a topic with an open question makes no model call. Finished topics keep their outcome while being reviewed.
 - `tools.ts`: the tutor acts **only** through the single `tutor_turn` tool (grade, then move: next/easier/back_to_original/finish_topic, then the next question). A PostToolUse hook returns `continue: false`, so each answer costs exactly one model call.
 - `prompt.ts`: the `Mode` prompts. To add a new study mode, add a `Mode` here.
 - State lives in SQLite (`data/`, gitignored), and the UI is driven by SSE events (`snapshot`, `graded`, `scaffold`, `usage`, …).

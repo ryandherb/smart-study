@@ -4,7 +4,7 @@ import { addMessage, getQuestion, getSession, listTopics, sessionSnapshot, state
 import { fileBlocks, pageBlocks, type PageRef } from "./pages";
 import { MODES } from "./prompt";
 import { createPlanServer, createTopicServer } from "./tools";
-import { recordContext, recordRateLimit, recordResult, resetConversation, usageView } from "./usage";
+import { recordContext, recordRateLimit, recordResult, usageView } from "./usage";
 
 type Listener = (event: string, data: unknown) => void;
 type Content = Exclude<SDKUserMessage["message"]["content"], string>;
@@ -128,7 +128,7 @@ export class Tutor {
       recordContext(this.sessionId, m.message.usage);
       if (m.error) this.emit("error", { message: `Claude error: ${m.error}` });
     } else if (m.type === "result") {
-      recordResult(this.sessionId, m.modelUsage, m.total_cost_usd);
+      recordResult(this.sessionId, m.session_id, m.modelUsage, m.total_cost_usd);
       this.emit("usage", usageView(this.sessionId));
     }
   }
@@ -156,7 +156,6 @@ export class Tutor {
       { type: "text", text: `Files: ${files.map((f) => f.name).join(", ")}. Build the study plan.` },
     ] as Content;
 
-    resetConversation(this.sessionId);
     const q = query({
       prompt: (async function* () {
         yield userMessage(content);
@@ -199,20 +198,63 @@ export class Tutor {
     }
   }
 
-  /** Moves to the next pending topic, or finishes the session. */
-  private async advance() {
-    const next = listTopics(this.sessionId).find((t) => t.status === "pending" || t.status === "active");
-    if (!next) return this.finishSession();
+  /** Stores the active topic's conversation, open question and scaffold so it can be resumed later. */
+  private saveTopicState() {
+    const s = getSession(this.sessionId)!;
+    if (!s.current_topic) return;
+    db.query(
+      `UPDATE topics SET sdk_session_id = ?, current_question_id = ?, scaffold_stack = ?,
+         status = CASE WHEN status = 'active' THEN 'paused' ELSE status END
+       WHERE session_id = ? AND key = ?`,
+    ).run(s.sdk_session_id, s.current_question_id, s.scaffold_stack, this.sessionId, s.current_topic);
+  }
+
+  /** Makes a topic current, restoring where the student left off. Only asks Claude if no question is open. */
+  private async enterTopic(key: string) {
     this.closeConversation();
-    db.query("UPDATE topics SET status = 'active' WHERE session_id = ? AND key = ?").run(this.sessionId, next.key);
+    const t = listTopics(this.sessionId).find((x) => x.key === key)!;
+    // Finished topics keep their outcome while being reviewed; only unfinished ones become 'active'.
+    db.query("UPDATE topics SET status = 'active' WHERE session_id = ? AND key = ? AND status IN ('pending', 'paused')").run(
+      this.sessionId,
+      key,
+    );
     updateSession(this.sessionId, {
-      current_topic: next.key,
-      current_question_id: null,
-      scaffold_stack: "[]",
-      sdk_session_id: null,
+      status: "active",
+      current_topic: key,
+      current_question_id: t.current_question_id,
+      scaffold_stack: t.scaffold_stack ?? "[]",
+      sdk_session_id: t.sdk_session_id,
     });
+    if (t.current_question_id) {
+      this.setBusy(false);
+      this.emit("snapshot");
+      return;
+    }
     this.emit("snapshot");
-    await this.send("[BEGIN TOPIC]");
+    await this.send(t.sdk_session_id ? "[RESUME TOPIC]" : "[BEGIN TOPIC]");
+  }
+
+  /** The student picked a topic: pause the current one and switch. */
+  async jumpTo(key: string) {
+    if (key === getSession(this.sessionId)!.current_topic) return;
+    this.saveTopicState();
+    try {
+      await this.enterTopic(key);
+    } catch (err) {
+      this.fail(err);
+    }
+  }
+
+  /** After finish_topic (or at the start): the next unfinished topic after the current one, wrapping around. */
+  private async advance() {
+    this.saveTopicState();
+    const s = getSession(this.sessionId)!;
+    const topics = listTopics(this.sessionId);
+    const i = topics.findIndex((t) => t.key === s.current_topic);
+    const ordered = [...topics.slice(i + 1), ...topics.slice(0, Math.max(i, 0))];
+    const next = ordered.find((t) => ["pending", "paused", "active"].includes(t.status));
+    if (!next) return this.finishSession();
+    await this.enterTopic(next.key);
   }
 
   private finishSession() {
@@ -225,7 +267,9 @@ export class Tutor {
       )
       .all(this.sessionId)
       .map((r) => r.misconception);
-    const lines = topics.map((t) => `- **${t.title}**: ${t.status}${t.outcome_note ? `. ${t.outcome_note}` : ""}`);
+    const lines = topics.map(
+      (t) => `- **${t.title}**: ${t.status === "paused" ? "not finished" : t.status}${t.outcome_note ? `. ${t.outcome_note}` : ""}`,
+    );
     const summary = [
       "### How it went",
       ...lines,
@@ -277,7 +321,6 @@ export class Tutor {
       onFinishTopic: () => (this.topicDone = true),
     });
     const intro = s.sdk_session_id ? [] : await this.topicIntro();
-    if (!s.sdk_session_id) resetConversation(this.sessionId);
 
     const input = new InputQueue();
     const q = query({
