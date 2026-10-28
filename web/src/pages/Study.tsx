@@ -6,12 +6,13 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { AnswerInput } from "../components/AnswerInput";
 import { FeedbackCard, YourAnswer } from "../components/FeedbackCard";
 import { QuestionCard } from "../components/QuestionCard";
+import { ReferencePanel } from "../components/ReferencePanel";
 import { ScaffoldBreadcrumb } from "../components/ScaffoldBreadcrumb";
 import { SidePanel, type PanelTab } from "../components/SidePanel";
 import { ProgressBar, TopicRail } from "../components/TopicRail";
 import { UsageBar } from "../components/UsageBar";
 import { Button, ThemeToggle, ThinkingDots } from "../components/ui";
-import { api } from "../lib/api";
+import { api, MODES } from "../lib/api";
 import { useStudy } from "../lib/store";
 
 function Loading({ title, subtitle }: { title: string; subtitle: string }) {
@@ -57,6 +58,10 @@ export default function Study() {
   const done = snap.topics.filter((t) => !["pending", "active"].includes(t.status)).length;
   const sourceTarget = shown?.sourceRef ?? null;
   const stack = pinned?.stack ?? snap.stack;
+  // After a "retry" move the same question stays open: reopen the editor with the last answer to revise.
+  const retry = !!pinned && !snap.busy && snap.current?.id === pinned.question.id;
+  const revising = !pinned && snap.lastAttempt?.verdict && snap.lastAttempt.verdict !== "correct" ? snap.lastAttempt.answer : undefined;
+  const modeLabel = snap.mode !== "adaptive" ? MODES.find((m) => m.id === snap.mode)?.label : undefined;
 
   return (
     <div className="app-bg flex h-full flex-col pb-10">
@@ -68,6 +73,11 @@ export default function Study() {
           </Link>
           <div className="h-5 w-px bg-zinc-200 dark:bg-white/10" />
           <h1 className="truncate font-semibold">{snap.set.title}</h1>
+          {modeLabel && (
+            <span className="hidden rounded-full bg-accent-500/10 px-2 py-0.5 text-xs font-medium text-accent-700 sm:inline dark:text-accent-300">
+              {modeLabel}
+            </span>
+          )}
           {snap.topics.length > 0 && (
             <span className="hidden text-xs tabular-nums text-zinc-500 sm:inline">
               {done}/{snap.topics.length} topics
@@ -200,6 +210,8 @@ export default function Study() {
                           <FeedbackCard
                             feedback={feedback}
                             nextReady={nextReady}
+                            retry={retry}
+                            tests={pinned.tests}
                             onContinue={continueOn}
                             onConfused={() => control("CONFUSED")}
                             onSkip={() => control("SKIP")}
@@ -210,14 +222,21 @@ export default function Study() {
                       </div>
                     ) : (
                       <>
-                        <AnswerInput question={shown} disabled={snap.busy} onSubmit={submit} />
-                        <div className={clsx("mt-3 flex justify-end gap-1", snap.busy && "pointer-events-none opacity-50")}>
+                        <AnswerInput
+                          question={shown}
+                          disabled={snap.busy}
+                          initial={revising ?? undefined}
+                          onSubmit={submit}
+                          onRun={(code) => api.runTests(snap.id, shown.id, code)}
+                        />
+                        <div className={clsx("mt-3 flex flex-wrap justify-end gap-1", snap.busy && "pointer-events-none opacity-50")}>
                           <Button variant="ghost" size="sm" onClick={() => control("CONFUSED")}>
                             I don't know where to start
                           </Button>
                           <Button variant="ghost" size="sm" onClick={() => control("SKIP")}>
                             Skip
                           </Button>
+                          <ReferencePanel sessionId={snap.id} question={shown} />
                         </div>
                       </>
                     )}
@@ -254,7 +273,7 @@ export default function Study() {
           )}
         </AnimatePresence>
       </div>
-      {snap.usage && <UsageBar usage={snap.usage} busy={snap.busy} />}
+      {snap.usage && <UsageBar usage={snap.usage} busy={snap.busy} provider={snap.provider} />}
     </div>
   );
 }

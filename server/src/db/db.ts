@@ -23,6 +23,14 @@ addColumn("topics", "outcome_note", "TEXT");
 addColumn("topics", "sdk_session_id", "TEXT");
 addColumn("topics", "current_question_id", "TEXT");
 addColumn("topics", "scaffold_stack", "TEXT");
+addColumn("questions", "reference_md", "TEXT");
+addColumn("questions", "rubric", "TEXT");
+addColumn("questions", "harness", "TEXT");
+addColumn("questions", "revealed", "INTEGER NOT NULL DEFAULT 0");
+addColumn("attempts", "test_summary", "TEXT");
 
 export const newId = () => crypto.randomUUID();
 export const now = () => Date.now();
+
+addColumn("sessions", "provider", "TEXT NOT NULL DEFAULT 'claude'");
+db.exec(`CREATE TABLE IF NOT EXISTS provider_history (session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE, topic_key TEXT NOT NULL, history TEXT NOT NULL, PRIMARY KEY(session_id, topic_key))`);

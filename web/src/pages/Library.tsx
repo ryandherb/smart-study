@@ -1,10 +1,10 @@
 import clsx from "clsx";
-import { FileText, GraduationCap, Play, Plus, RotateCcw, Trash2, UploadCloud, X } from "lucide-react";
+import { FileText, GraduationCap, PencilLine, Play, Plus, RotateCcw, Trash2, UploadCloud, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button, ThemeToggle } from "../components/ui";
-import { api, MODELS, type StudySet } from "../lib/api";
+import { api, MODELS, MODES, type ProviderStatus, type StudySet } from "../lib/api";
 
 function MasteryRing({ mastered, struggled, total }: { mastered: number; struggled: number; total: number }) {
   const r = 22;
@@ -27,10 +27,11 @@ function MasteryRing({ mastered, struggled, total }: { mastered: number; struggl
   );
 }
 
-function NewSet({ onCreated }: { onCreated: () => void }) {
+function NewSet({ onCreated, provider, ready }: { onCreated: () => void; provider: string; ready: boolean }) {
   const [files, setFiles] = useState<File[]>([]);
   const [title, setTitle] = useState("");
   const [model, setModel] = useState("");
+  const [mode, setMode] = useState("adaptive");
   const [drag, setDrag] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -48,7 +49,7 @@ function NewSet({ onCreated }: { onCreated: () => void }) {
     setErr(null);
     try {
       const set = await api.createSet(files, title);
-      const s = await api.startSession(set.id, model || undefined);
+      const s = await api.startSession(set.id, provider === "claude" ? model || undefined : undefined, mode, provider);
       onCreated();
       navigate(`/study/${s.id}`);
     } catch (e) {
@@ -102,6 +103,18 @@ function NewSet({ onCreated }: { onCreated: () => void }) {
                 className="h-10 min-w-48 flex-1 rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none focus:border-accent-500 dark:border-white/10 dark:bg-zinc-950/50"
               />
               <select
+                value={mode}
+                onChange={(e) => setMode(e.target.value)}
+                className="h-10 rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none dark:border-white/10 dark:bg-zinc-950/50"
+                title={MODES.find((m) => m.id === mode)?.hint}
+              >
+                {MODES.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.label}
+                  </option>
+                ))}
+              </select>
+              {provider === "claude" && <select
                 value={model}
                 onChange={(e) => setModel(e.target.value)}
                 className="h-10 rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none dark:border-white/10 dark:bg-zinc-950/50"
@@ -113,7 +126,8 @@ function NewSet({ onCreated }: { onCreated: () => void }) {
                   </option>
                 ))}
               </select>
-              <Button variant="primary" onClick={start} disabled={busy}>
+              }
+              <Button variant="primary" onClick={start} disabled={busy || !ready}>
                 <Play className="size-4" /> {busy ? "Starting…" : "Start studying"}
               </Button>
             </div>
@@ -126,14 +140,35 @@ function NewSet({ onCreated }: { onCreated: () => void }) {
 }
 
 export default function Library() {
+  const [providers, setProviders] = useState<ProviderStatus[]>([]);
+  const [provider, setProvider] = useState(() => localStorage.getItem("study-provider") ?? "claude");
+  const [providerError, setProviderError] = useState("");
+  const [sessionError, setSessionError] = useState("");
+  const refreshProviders = () => {
+    setProviderError("");
+    api.providers().then(items => {
+      setProviders(items);
+      setProvider(current => {
+        if (items.some(p => p.id === current && p.available)) return current;
+        const next = items.find(p => p.available)?.id ?? current;
+        localStorage.setItem("study-provider", next);
+        return next;
+      });
+    }).catch(e => setProviderError(e.message));
+  };
+  useEffect(refreshProviders, []);
+  const ready = providers.some(p => p.id === provider && p.available);
   const [sets, setSets] = useState<StudySet[] | null>(null);
   const navigate = useNavigate();
   const load = () => api.listSets().then(setSets);
   useEffect(() => void load(), []);
 
-  const newSession = async (setId: string) => {
-    const s = await api.startSession(setId);
-    navigate(`/study/${s.id}`);
+  const newSession = async (setId: string, mode?: string) => {
+    setSessionError("");
+    try {
+      const s = await api.startSession(setId, undefined, mode, provider);
+      navigate(`/study/${s.id}`);
+    } catch (e) { setSessionError((e as Error).message); }
   };
 
   return (
@@ -150,11 +185,26 @@ export default function Library() {
           <ThemeToggle />
         </header>
 
+        <section className="card mb-6 p-5" aria-label="AI service settings">
+          <div className="flex flex-wrap items-center gap-3">
+            <label htmlFor="provider" className="text-sm font-medium">Quiz service</label>
+            <select id="provider" value={provider} onChange={e => {
+              setProvider(e.target.value); localStorage.setItem("study-provider", e.target.value);
+            }} className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-zinc-950">
+              {!providers.length && <option value={provider}>Checking connections…</option>}
+              {providers.map(p => <option key={p.id} value={p.id} disabled={!p.available}>{p.label}{p.available ? " · connected" : " · setup needed"}</option>)}
+            </select>
+            <Button size="sm" onClick={refreshProviders}>Refresh connections</Button>
+          </div>
+          <p className="mt-2 text-xs text-zinc-500">Used for new sessions. Existing sessions keep their service.</p>
+          {providers.map(p => <p key={p.id} className="mt-1 text-xs text-zinc-500">{p.label}: {p.hint}</p>)}
+          {(providerError || sessionError) && <p role="alert" className="mt-2 text-sm text-rose-500">{providerError || sessionError}</p>}
+        </section>
         <section className="mb-12">
           <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-zinc-500">
             <Plus className="size-4" /> New study set
           </h2>
-          <NewSet onCreated={load} />
+          <NewSet onCreated={load} provider={provider} ready={ready} />
         </section>
 
         {sets && sets.length > 0 && (
@@ -211,8 +261,11 @@ export default function Library() {
                           </Button>
                         )
                       )}
-                      <Button variant={active ? "secondary" : "primary"} size="sm" onClick={() => newSession(s.id)}>
+                      <Button variant={active ? "secondary" : "primary"} size="sm" disabled={!ready} onClick={() => newSession(s.id)}>
                         <RotateCcw className="size-4" /> New session
+                      </Button>
+                      <Button size="sm" variant="ghost" disabled={!ready} onClick={() => newSession(s.id, "exam")} title={MODES.find((m) => m.id === "exam")?.hint}>
+                        <PencilLine className="size-4" /> Exam practice
                       </Button>
                     </div>
                   </motion.div>

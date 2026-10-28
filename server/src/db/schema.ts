@@ -71,6 +71,10 @@ CREATE TABLE IF NOT EXISTS questions (
   depth INTEGER NOT NULL DEFAULT 0,
   parent_question_id TEXT,
   source_ref TEXT,
+  reference_md TEXT,                          -- hidden worked solution (shown only when the student reveals it)
+  rubric TEXT,                                -- JSON string[] of grading criteria
+  harness TEXT,                               -- test program with a STUDENT_CODE_HERE marker (see tutor/runner.ts)
+  revealed INTEGER NOT NULL DEFAULT 0,        -- student viewed the reference
   created_at INTEGER NOT NULL
 );
 
@@ -81,6 +85,7 @@ CREATE TABLE IF NOT EXISTS attempts (
   verdict TEXT,
   feedback_md TEXT,
   misconception TEXT,
+  test_summary TEXT,                          -- local test results sent with the answer
   created_at INTEGER NOT NULL
 );
 

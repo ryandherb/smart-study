@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { api, type Feedback, type Question, type Snapshot } from "./api";
+import { api, type Feedback, type Question, type Snapshot, type TestResult } from "./api";
 
 interface ScaffoldNotice {
   direction: "down" | "up";
@@ -11,7 +11,7 @@ interface ScaffoldNotice {
 interface StudyState {
   snap: Snapshot | null;
   /** Question the student just answered; stays on screen with its feedback until "Continue". */
-  pinned: { question: Question; answer: string; stack: Question[] } | null;
+  pinned: { question: Question; answer: string; stack: Question[]; tests?: TestResult | null } | null;
   feedback: Feedback | null;
   scaffold: ScaffoldNotice | null;
   error: string | null;
@@ -71,7 +71,9 @@ export const useStudy = create<StudyState>((set, get) => ({
     if (!snap?.current) return;
     set({ pinned: { question: snap.current, answer, stack: snap.stack }, feedback: null, snap: { ...snap, busy: true } });
     try {
-      await api.answer(snap.id, snap.current.id, answer);
+      const { tests } = await api.answer(snap.id, snap.current.id, answer);
+      const pinned = get().pinned;
+      if (tests && pinned?.question.id === snap.current.id) set({ pinned: { ...pinned, tests } });
     } catch (e) {
       set({ pinned: null, error: (e as Error).message, snap: { ...get().snap!, busy: false } });
     }

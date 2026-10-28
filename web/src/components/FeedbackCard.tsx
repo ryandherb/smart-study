@@ -1,9 +1,10 @@
 import clsx from "clsx";
-import { ArrowRight, CheckCircle2, CircleAlert, HelpCircle, SkipForward, XCircle } from "lucide-react";
+import { ArrowRight, CheckCircle2, CircleAlert, HelpCircle, PencilLine, SkipForward, XCircle } from "lucide-react";
 import { motion } from "motion/react";
 import { useEffect } from "react";
-import type { Feedback, Question } from "../lib/api";
+import type { Feedback, Question, TestResult } from "../lib/api";
 import { Markdown } from "./Markdown";
+import { TestChip } from "./TestResults";
 import { Button, Kbd, ThinkingDots } from "./ui";
 
 const STYLE = {
@@ -40,12 +41,17 @@ export function YourAnswer({ answer, question }: { answer: string; question: Que
 export function FeedbackCard({
   feedback,
   nextReady,
+  retry,
+  tests,
   onContinue,
   onConfused,
   onSkip,
 }: {
   feedback: Feedback;
   nextReady: boolean;
+  /** The tutor kept the same question open for a revised answer. */
+  retry?: boolean;
+  tests?: TestResult | null;
   onContinue: () => void;
   onConfused: () => void;
   onSkip: () => void;
@@ -74,6 +80,7 @@ export function FeedbackCard({
           <Icon className="size-5" />
         </motion.span>
         {s.title}
+        {tests && <TestChip result={tests} />}
         {feedback.misconception && feedback.verdict !== "correct" && (
           <span className="ml-2 truncate rounded-full bg-white/60 px-2.5 py-0.5 text-xs font-medium text-zinc-600 dark:bg-black/20 dark:text-zinc-300">
             {feedback.misconception}
@@ -85,7 +92,15 @@ export function FeedbackCard({
         <Button variant="primary" onClick={onContinue} disabled={!nextReady}>
           {nextReady ? (
             <>
-              {feedback.verdict === "correct" ? "Continue" : "Try an easier step"} <ArrowRight className="size-4" />
+              {retry ? (
+                <>
+                  <PencilLine className="size-4" /> Revise your answer
+                </>
+              ) : (
+                <>
+                  {feedback.verdict === "correct" ? "Continue" : "Try an easier step"} <ArrowRight className="size-4" />
+                </>
+              )}
               <Kbd>N</Kbd>
             </>
           ) : (

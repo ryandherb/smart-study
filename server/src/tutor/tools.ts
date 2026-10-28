@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db, newId, now } from "../db/db";
 import { getSession, getStack, gradeLatestAttempt, updateSession } from "../db/repo";
 import { pageCount } from "./pages";
+import { canRun, runTests } from "./runner";
 
 export const SERVER_NAME = "tutor";
 export const toolId = (name: string) => `mcp__${SERVER_NAME}__${name}`;
@@ -64,7 +65,19 @@ export function createPlanServer(setId: string, onSaved: () => void) {
       return ok(`Saved ${topics.length} topics.`);
     },
   );
-  return { server: createSdkMcpServer({ name: SERVER_NAME, version: "1.0.0", tools: [savePlan] }), toolIds: [toolId("save_plan")] };
+  return { definition: savePlan, server: createSdkMcpServer({ name: SERVER_NAME, version: "1.0.0", tools: [savePlan] }), toolIds: [toolId("save_plan")] };
+}
+
+/**
+ * Keeps a harness only if the reference solution passes it, so the student is never graded by broken tests.
+ * A bad harness is dropped rather than rejected: asking the model to fix it would cost another call.
+ */
+async function verifiedHarness(language: string | undefined, harness?: string, reference?: string) {
+  if (!harness || !reference || !canRun(language)) return null;
+  const r = await runTests(language!, harness, reference);
+  if (r.status === "ok" && r.total > 0 && r.passed === r.total) return harness;
+  console.warn(`[tests] dropped harness (${language}): reference got ${r.passed}/${r.total}, ${r.status}\n${r.output.slice(0, 500)}`);
+  return null;
 }
 
 /** Topic conversation: a single tool per turn that grades, moves, and asks the next question. */
@@ -77,7 +90,7 @@ export function createTopicServer(
 
   const tutorTurn = tool(
     "tutor_turn",
-    "Do one tutoring step: optionally grade the current question, then move (next / easier / back_to_original / finish_topic) and give the next question. Call exactly once per turn.",
+    "Do one tutoring step: optionally grade the current question, then move (next / easier / back_to_original / retry / finish_topic) and give the next question. Call exactly once per turn.",
     {
       grade: z
         .object({
@@ -87,7 +100,9 @@ export function createTopicServer(
         })
         .optional()
         .describe("grades the current open question; omit when there is no answer to grade"),
-      move: z.enum(["next", "easier", "back_to_original", "finish_topic"]),
+      move: z
+        .enum(["next", "easier", "back_to_original", "retry", "finish_topic"])
+        .describe("'retry' keeps the current question open so the student can revise their answer (needs grade, no question)"),
       reason: z.string().optional().describe("for 'easier': the gap this step addresses, shown to the student"),
       question: z
         .object({
@@ -97,9 +112,21 @@ export function createTopicServer(
           language: z.string().optional().describe("for code: e.g. 'java', 'python'"),
           difficulty: z.number().int().min(1).max(5).optional(),
           source: z.object({ file: z.string(), page: z.number().int().optional() }).optional(),
+          check: z
+            .object({
+              reference_md: z.string().describe("worked solution, hidden until the student asks for it"),
+              rubric: z.array(z.string()).describe("3-6 short grading criteria"),
+              harness: z
+                .string()
+                .optional()
+                .describe("for code: complete test program with a STUDENT_CODE_HERE comment line; prints PASS <name> / FAIL <name>: <detail>"),
+              reference_code: z.string().optional().describe("for code: the reference solution exactly as it would replace the marker"),
+            })
+            .optional()
+            .describe("hidden answer key for checking the student's work"),
         })
         .optional()
-        .describe("required unless move is 'finish_topic'"),
+        .describe("required unless move is 'finish_topic' or 'retry'"),
       topic_outcome: outcome.optional().describe("for finish_topic"),
       topic_note: z.string().optional().describe("for finish_topic: one sentence for the session summary"),
     },
@@ -112,7 +139,8 @@ export function createTopicServer(
       if (args.grade && !currentId) return fail("There is no open question to grade; omit grade.");
       if (args.move === "easier" && !currentId) return fail("No open question to step down from.");
       if (args.move === "back_to_original" && !stack.length) return fail("No original question to return to; use move 'next'.");
-      if (args.move !== "finish_topic") {
+      if (args.move === "retry" && (!currentId || !args.grade)) return fail("retry needs an open question and a grade.");
+      if (args.move !== "finish_topic" && args.move !== "retry") {
         if (!args.question) return fail("question is required for this move.");
         if (args.question.type === "mcq" && !args.question.choices?.length) return fail("mcq questions need choices.");
       }
@@ -141,6 +169,12 @@ export function createTopicServer(
         return ok("Topic finished.");
       }
 
+      if (args.move === "retry") {
+        hooks.onTurnOk();
+        changed();
+        return ok(`Question ${currentId} stays open for a revised answer.`);
+      }
+
       if (args.move === "easier") {
         if (stack.at(-1) !== currentId) stack.push(currentId!);
         emit("scaffold", { direction: "down", reason: args.reason, depth: stack.length });
@@ -151,9 +185,11 @@ export function createTopicServer(
 
       const q = args.question!;
       const id = newId().slice(0, 8);
+      const harness = await verifiedHarness(q.language, q.check?.harness, q.check?.reference_code);
       db.query(
-        `INSERT INTO questions (id, session_id, topic_key, prompt_md, type, choices, language, difficulty, depth, parent_question_id, source_ref, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO questions (id, session_id, topic_key, prompt_md, type, choices, language, difficulty, depth, parent_question_id, source_ref,
+           reference_md, rubric, harness, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(
         id,
         sessionId,
@@ -166,6 +202,9 @@ export function createTopicServer(
         stack.length,
         stack.at(-1) ?? null,
         q.source ? JSON.stringify(q.source) : null,
+        q.check?.reference_md ?? null,
+        q.check?.rubric ? JSON.stringify(q.check.rubric) : null,
+        harness,
         now(),
       );
       updateSession(sessionId, { current_question_id: id, scaffold_stack: JSON.stringify(stack) });
@@ -177,6 +216,7 @@ export function createTopicServer(
   );
 
   return {
+    definition: tutorTurn,
     server: createSdkMcpServer({ name: SERVER_NAME, version: "1.0.0", tools: [tutorTurn] }),
     toolIds: [toolId("tutor_turn")],
   };

@@ -12,6 +12,23 @@ export interface Question {
   depth: number;
   parentQuestionId: string | null;
   sourceRef: { file: string; page?: number } | null;
+  /** Hidden tests exist: "Run tests" checks a draft locally without a model call. */
+  hasTests: boolean;
+  /** A hidden reference solution + rubric exists (revealed on request). */
+  hasReference: boolean;
+}
+
+export interface TestResult {
+  status: "ok" | "compile_error" | "runtime_error" | "timeout" | "unsupported";
+  passed: number;
+  total: number;
+  tests: { name: string; pass: boolean; detail?: string }[];
+  output: string;
+}
+
+export interface Reference {
+  referenceMd: string;
+  rubric: string[];
 }
 
 export interface Topic {
@@ -59,6 +76,7 @@ export interface Snapshot {
   files: { id: string; name: string }[];
   mode: string;
   model: string | null;
+  provider: "claude" | "chatgpt";
   status: "active" | "finished";
   currentTopic: string | null;
   topics: Topic[];
@@ -97,6 +115,11 @@ export const MODELS = [
   { id: "claude-haiku-5-5", label: "Haiku 5.5" },
 ];
 
+export const MODES = [
+  { id: "adaptive", label: "Adaptive tutor", hint: "Short questions; steps down when you miss" },
+  { id: "exam", label: "Exam practice", hint: "Full free-response problems with local tests" },
+];
+
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, init);
   const body = await res.json().catch(() => ({}));
@@ -110,7 +133,15 @@ const json = (method: string, body: unknown): RequestInit => ({
   body: JSON.stringify(body),
 });
 
+export interface ProviderStatus {
+  id: "claude" | "chatgpt";
+  label: string;
+  available: boolean;
+  hint: string;
+}
+
 export const api = {
+  providers: () => req<ProviderStatus[]>("/providers"),
   listSets: () => req<StudySet[]>("/sets"),
   createSet: (files: File[], title: string) => {
     const form = new FormData();
@@ -121,11 +152,15 @@ export const api = {
   deleteSet: (id: string) => req("/sets/" + id, { method: "DELETE" }),
   fileUrl: (fileId: string) => `/api/sets/files/${fileId}`,
 
-  startSession: (setId: string, model?: string) => req<{ id: string }>("/sessions", json("POST", { setId, model })),
+  startSession: (setId: string, model?: string, mode?: string, provider = "claude") =>
+    req<{ id: string }>("/sessions", json("POST", { setId, model, mode, provider })),
   getSession: (id: string) => req<Snapshot>(`/sessions/${id}`),
   report: (id: string) => req<Report>(`/sessions/${id}/report`),
   answer: (id: string, questionId: string, answer: string) =>
-    req(`/sessions/${id}/answer`, json("POST", { questionId, answer })),
+    req<{ ok: true; tests: TestResult | null }>(`/sessions/${id}/answer`, json("POST", { questionId, answer })),
+  runTests: (id: string, questionId: string, code: string) =>
+    req<TestResult>(`/sessions/${id}/run`, json("POST", { questionId, code })),
+  reveal: (id: string, questionId: string) => req<Reference>(`/sessions/${id}/reveal`, json("POST", { questionId })),
   control: (id: string, kind: "CONFUSED" | "SKIP", questionId: string) =>
     req(`/sessions/${id}/control`, json("POST", { kind, questionId })),
   side: (id: string, text: string) => req(`/sessions/${id}/side`, json("POST", { text })),

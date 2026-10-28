@@ -58,7 +58,7 @@ export default function Summary() {
           <Button
             variant="primary"
             size="sm"
-            onClick={async () => navigate(`/study/${(await api.startSession(r.set.id, r.model ?? undefined)).id}`)}
+            onClick={async () => navigate(`/study/${(await api.startSession(r.set.id, r.model ?? undefined, r.mode, r.provider)).id}`)}
           >
             <RotateCcw className="size-4" /> Study again
           </Button>

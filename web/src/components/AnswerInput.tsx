@@ -6,10 +6,11 @@ import { sql } from "@codemirror/lang-sql";
 import { githubDark, githubLight } from "@uiw/codemirror-theme-github";
 import CodeMirror from "@uiw/react-codemirror";
 import clsx from "clsx";
-import { Check, Send } from "lucide-react";
+import { Check, FlaskConical, Send } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Question } from "../lib/api";
+import type { Question, TestResult } from "../lib/api";
 import { Markdown } from "./Markdown";
+import { TestResults } from "./TestResults";
 import { Button, Kbd } from "./ui";
 
 const LETTERS = "ABCDEFGH";
@@ -50,21 +51,30 @@ const useDark = () => {
 export function AnswerInput({
   question,
   disabled,
+  initial,
   onSubmit,
+  onRun,
 }: {
   question: Question;
   disabled: boolean;
+  /** Pre-fills the editor, e.g. with the previous attempt when revising. */
+  initial?: string;
   onSubmit: (answer: string) => void;
+  /** Runs the question's hidden tests locally (no model call). */
+  onRun?: (code: string) => Promise<TestResult>;
 }) {
-  const [text, setText] = useState("");
+  const [text, setText] = useState(initial ?? "");
   const [choice, setChoice] = useState<number | null>(null);
+  const [results, setResults] = useState<TestResult | null>(null);
+  const [running, setRunning] = useState(false);
   const dark = useDark();
   const textRef = useRef<HTMLTextAreaElement | HTMLInputElement>(null);
   const extensions = useMemo(() => langExtension(question.language), [question.language]);
 
   useEffect(() => {
-    setText("");
+    setText(initial ?? "");
     setChoice(null);
+    setResults(null);
     setTimeout(() => textRef.current?.focus(), 50);
   }, [question.id]);
 
@@ -76,6 +86,18 @@ export function AnswerInput({
       : text.trim();
   const canSubmit = !disabled && answer.length > 0;
   const submit = () => canSubmit && onSubmit(answer);
+  const canRun = !!onRun && question.hasTests && !running && text.trim().length > 0;
+  const run = async () => {
+    if (!canRun) return;
+    setRunning(true);
+    try {
+      setResults(await onRun!(text));
+    } catch (e) {
+      setResults({ status: "unsupported", passed: 0, total: 0, tests: [], output: (e as Error).message });
+    } finally {
+      setRunning(false);
+    }
+  };
 
   // Keyboard: Ctrl/Cmd+Enter submits; A–H / 1–8 picks an MCQ choice.
   useEffect(() => {
@@ -83,6 +105,11 @@ export function AnswerInput({
       if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
         e.preventDefault();
         submit();
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === "'") {
+        e.preventDefault();
+        run();
         return;
       }
       if (question.type !== "mcq" || disabled || e.ctrlKey || e.metaKey || e.altKey) return;
@@ -101,15 +128,27 @@ export function AnswerInput({
     <div className="mt-4 flex items-center justify-between gap-3">
       <span className="text-xs text-zinc-400">
         <Kbd>Ctrl</Kbd> + <Kbd>Enter</Kbd> to submit
+        {question.hasTests && onRun && (
+          <>
+            {" "}· <Kbd>Ctrl</Kbd> + <Kbd>'</Kbd> to run tests
+          </>
+        )}
         {question.type === "mcq" && (
           <>
             {" "}· <Kbd>A</Kbd>–<Kbd>{LETTERS[(question.choices?.length ?? 1) - 1]}</Kbd> to choose
           </>
         )}
       </span>
-      <Button variant="primary" onClick={submit} disabled={!canSubmit}>
-        <Send className="size-4" /> Submit
-      </Button>
+      <span className="flex gap-2">
+        {question.hasTests && onRun && (
+          <Button onClick={run} disabled={!canRun} title="Check your draft against the hidden tests. Free: runs on your computer.">
+            <FlaskConical className="size-4" /> {running ? "Running…" : "Run tests"}
+          </Button>
+        )}
+        <Button variant="primary" onClick={submit} disabled={!canSubmit}>
+          <Send className="size-4" /> Submit
+        </Button>
+      </span>
     </div>
   );
 
@@ -161,13 +200,15 @@ export function AnswerInput({
             onChange={setText}
             editable={!disabled}
             autoFocus
-            height="260px"
+            minHeight="320px"
+            maxHeight="70vh"
             theme={dark ? githubDark : githubLight}
             extensions={extensions}
             basicSetup={{ foldGutter: false }}
             placeholder={`Write your ${question.language ?? "code"} here…`}
           />
         </div>
+        {results && <TestResults result={results} />}
         {footer}
       </div>
     );
