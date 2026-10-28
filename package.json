@@ -1,0 +1,8 @@
+{
+  "name": "study-claude",
+  "private": true,
+  "workspaces": ["server", "web"],
+  "scripts": {
+    "dev": "bun run --filter '*' dev"
+  }
+}
