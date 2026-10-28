@@ -9,6 +9,7 @@ import { QuestionCard } from "../components/QuestionCard";
 import { ScaffoldBreadcrumb } from "../components/ScaffoldBreadcrumb";
 import { SidePanel, type PanelTab } from "../components/SidePanel";
 import { ProgressBar, TopicRail } from "../components/TopicRail";
+import { UsageBar } from "../components/UsageBar";
 import { Button, ThemeToggle, ThinkingDots } from "../components/ui";
 import { api } from "../lib/api";
 import { useStudy } from "../lib/store";
@@ -58,7 +59,7 @@ export default function Study() {
   const stack = pinned?.stack ?? snap.stack;
 
   return (
-    <div className="app-bg flex h-full flex-col">
+    <div className="app-bg flex h-full flex-col pb-10">
       {/* top bar */}
       <header className="sticky top-0 z-20 border-b border-zinc-200/70 bg-zinc-50/70 backdrop-blur dark:border-white/5 dark:bg-zinc-950/60">
         <div className="flex h-14 items-center gap-3 px-4">
@@ -130,7 +131,11 @@ export default function Study() {
               </motion.div>
             ) : !shown ? (
               snap.busy ? (
-                <Loading title="Reading your material" subtitle="Claude is mapping out topics and writing your first question…" />
+                snap.topics.length ? (
+                  <Loading title="Starting the next topic" subtitle="Loading just this topic's pages…" />
+                ) : (
+                  <Loading title="Reading your material" subtitle="Mapping out topics. This happens once per study set." />
+                )
               ) : (
                 <div className="card px-8 py-12 text-center text-zinc-500">
                   The tutor stopped before asking a question.
@@ -215,7 +220,7 @@ export default function Study() {
               transition={{ type: "spring", stiffness: 260, damping: 30 }}
               className="hidden shrink-0 md:block"
             >
-              <div className="h-[calc(100vh-7.5rem)] w-[440px]">
+              <div className="h-[calc(100vh-10rem)] w-[440px]">
                 <SidePanel
                   tab={panel}
                   setTab={setPanel}
@@ -231,6 +236,7 @@ export default function Study() {
           )}
         </AnimatePresence>
       </div>
+      {snap.usage && <UsageBar usage={snap.usage} busy={snap.busy} />}
     </div>
   );
 }
