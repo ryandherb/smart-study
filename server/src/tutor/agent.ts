@@ -82,6 +82,10 @@ export class Tutor {
         model: s.model ?? undefined,
         resume: s.sdk_session_id ?? undefined,
         mcpServers: { tutor: server },
+        // Only the tutor's tools: without these, the account's claude.ai connectors
+        // (Gmail, Notion, …) get loaded and add ~140k tokens of tool definitions per request.
+        strictMcpConfig: true,
+        settings: { disableClaudeAiConnectors: true },
         tools: [], // no built-in tools: PDFs are attached inline, the tutor only uses its own tools
         allowedTools: toolIds,
         permissionMode: "dontAsk",
