@@ -7,6 +7,7 @@ export interface SessionRow {
   set_id: string;
   mode: string;
   model: string | null;
+  provider: "claude" | "chatgpt";
   sdk_session_id: string | null;
   status: string;
   current_topic: string | null;
@@ -31,6 +32,10 @@ export interface QuestionRow {
   depth: number;
   parent_question_id: string | null;
   source_ref: string | null;
+  reference_md: string | null;
+  rubric: string | null;
+  harness: string | null;
+  revealed: number;
   created_at: number;
 }
 
@@ -60,12 +65,13 @@ export function setTopicStatus(sessionId: string, key: string, status: string) {
   db.query("UPDATE topics SET status = ? WHERE session_id = ? AND key = ?").run(status, sessionId, key);
 }
 
-export function recordAttempt(questionId: string, answer: string) {
+export function recordAttempt(questionId: string, answer: string, testSummary: string | null = null) {
   const id = newId();
-  db.query("INSERT INTO attempts (id, question_id, answer, created_at) VALUES (?, ?, ?, ?)").run(
+  db.query("INSERT INTO attempts (id, question_id, answer, test_summary, created_at) VALUES (?, ?, ?, ?, ?)").run(
     id,
     questionId,
     answer,
+    testSummary,
     now(),
   );
   return id;
@@ -115,6 +121,9 @@ export function questionView(q: QuestionRow) {
     depth: q.depth,
     parentQuestionId: q.parent_question_id,
     sourceRef: q.source_ref ? JSON.parse(q.source_ref) : null,
+    // Only flags: the reference and tests themselves stay on the server until revealed.
+    hasTests: !!q.harness,
+    hasReference: !!q.reference_md,
   };
 }
 
@@ -161,6 +170,7 @@ export function sessionSnapshot(sessionId: string) {
     files,
     mode: s.mode,
     model: s.model,
+    provider: s.provider,
     status: s.status,
     currentTopic: s.current_topic,
     topics,

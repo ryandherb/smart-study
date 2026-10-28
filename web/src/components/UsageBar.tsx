@@ -47,7 +47,7 @@ function Meter({ label, w, quizShare }: { label: string; w?: LimitWindow; quizSh
 }
 
 /** Fixed footer showing what the current quiz has used and where the subscription limits stand. */
-export function UsageBar({ usage, busy }: { usage: Usage; busy: boolean }) {
+export function UsageBar({ usage, busy, provider = "claude" }: { usage: Usage; busy: boolean; provider?: "claude" | "chatgpt" }) {
   const cached = usage.total ? usage.cacheRead / usage.total : 0;
   const limits = usage.limits;
   const detail = [
@@ -56,7 +56,7 @@ export function UsageBar({ usage, busy }: { usage: Usage; busy: boolean }) {
     `  cache writes: ${usage.cacheWrite.toLocaleString()}`,
     `  uncached input: ${usage.input.toLocaleString()} · output: ${usage.output.toLocaleString()}`,
     `Each call currently re-sends ~${fmtTokens(usage.lastContext)} tokens (PDFs + conversation).`,
-    `API-equivalent cost estimate: $${usage.costUSD.toFixed(2)} (your subscription isn't billed this; it's a size gauge).`,
+    provider === "chatgpt" ? "ChatGPT plan limits and cost estimates are not reported by Codex CLI." : `API-equivalent cost estimate: $${usage.costUSD.toFixed(2)} (your subscription isn't billed this; it's a size gauge).`,
     limits ? `\nLimits are account-wide, as of ${new Date(limits.at).toLocaleTimeString()}.` : "",
     usage.fiveHourDelta > 0
       ? `"This quiz" share = rise in 5-hour usage since the quiz started, so it includes any other Claude use in that time.`
@@ -74,7 +74,7 @@ export function UsageBar({ usage, busy }: { usage: Usage; busy: boolean }) {
             <>
               <span className="hidden text-zinc-400 md:inline">· {pct(cached)} cached</span>
               <span className="hidden text-zinc-400 lg:inline">· ~{fmtTokens(usage.lastContext)}/call</span>
-              <span className="text-zinc-400">· ≈{usage.costUSD < 0.01 ? "<$0.01" : `$${usage.costUSD.toFixed(2)}`} API</span>
+              {provider === "claude" && <span className="text-zinc-400">· ≈{usage.costUSD < 0.01 ? "<$0.01" : `$${usage.costUSD.toFixed(2)}`} API</span>}
             </>
           )}
           <Info className="size-3.5 text-zinc-400" />
@@ -93,7 +93,7 @@ export function UsageBar({ usage, busy }: { usage: Usage; busy: boolean }) {
             <Meter label="Weekly" w={limits.sevenDay} />
           </>
         ) : (
-          <span className="text-zinc-400">Plan limits appear after the tutor's next reply</span>
+          <span className="text-zinc-400">{provider === "chatgpt" ? "ChatGPT plan limits are available in Codex" : "Plan limits appear after the tutor's next reply"}</span>
         )}
       </div>
     </footer>

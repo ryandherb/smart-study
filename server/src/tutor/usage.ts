@@ -52,7 +52,7 @@ const save = (sessionId: string, u: SessionUsage) => updateSession(sessionId, { 
 /** What the UI shows: the session's totals plus the freshest account limits available. */
 export function usageView(sessionId: string) {
   const u = loadUsage(sessionId);
-  const limits = [latestLimits, u.limits].filter(Boolean).sort((a, b) => b!.at - a!.at)[0] ?? null;
+  const limits = getSession(sessionId)?.provider === "chatgpt" ? null : [latestLimits, u.limits].filter(Boolean).sort((a, b) => b!.at - a!.at)[0] ?? null;
   const { lastFiveHour, limits: _, conversations, ...totals } = u;
   return { ...totals, total: u.input + u.output + u.cacheRead + u.cacheWrite, limits };
 }
@@ -129,3 +129,4 @@ export function recordRateLimit(sessionId: string, info: SDKRateLimitInfo) {
   u.limits = latestLimits;
   save(sessionId, u);
 }
+

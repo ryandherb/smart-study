@@ -1,4 +1,5 @@
 import { query, type Options, type Query, type SDKMessage, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
+import { chatgptTurn } from "./chatgpt";
 import { db } from "../db/db";
 import { addMessage, getQuestion, getSession, listTopics, sessionSnapshot, stateLine, updateSession } from "../db/repo";
 import { fileBlocks, pageBlocks, type PageRef } from "./pages";
@@ -64,6 +65,7 @@ const planExists = (setId: string) =>
 
 export class Tutor {
   private q: Query | null = null;
+  private chatgptAbort: AbortController | null = null;
   private input: InputQueue | null = null;
   private listeners = new Set<Listener>();
   busy = false;
@@ -149,12 +151,23 @@ export class Tutor {
 
   private async runPlan(setId: string, model: string | undefined, modeId: string) {
     const mode = MODES[modeId] ?? MODES.adaptive!;
-    const { server, toolIds } = createPlanServer(setId, () => (this.turnOk = true));
+    const { server, toolIds, definition } = createPlanServer(setId, () => (this.turnOk = true));
     const files = db.query<{ id: string; name: string }, [string]>("SELECT id, name FROM files WHERE set_id = ?").all(setId);
     const content = [
       ...(await fileBlocks(files.map((f) => f.id))),
       { type: "text", text: `Files: ${files.map((f) => f.name).join(", ")}. Build the study plan.` },
     ] as Content;
+
+    if (getSession(this.sessionId)!.provider === "chatgpt") {
+      const controller = new AbortController();
+      this.chatgptAbort = controller;
+      try {
+        await chatgptTurn({ sessionId: this.sessionId, system: mode.planPrompt, blocks: content as any,
+          definition, signal: controller.signal });
+        this.emit("usage", usageView(this.sessionId));
+        return planExists(setId);
+      } finally { if (this.chatgptAbort === controller) this.chatgptAbort = null; }
+    }
 
     const q = query({
       prompt: (async function* () {
@@ -184,7 +197,7 @@ export class Tutor {
   async begin() {
     this.setBusy(true);
     try {
-      if (!(await this.ensurePlan())) throw new Error("Claude didn't produce a topic plan. Press Retry to try again.");
+      if (!(await this.ensurePlan())) throw new Error("The tutor didn't produce a topic plan. Press Retry to try again.");
       const s = getSession(this.sessionId)!;
       db.query(
         `INSERT OR IGNORE INTO topics (session_id, key, title, notes, pages, difficulty, status, order_idx)
@@ -379,6 +392,8 @@ export class Tutor {
   }
 
   private closeConversation() {
+    this.chatgptAbort?.abort();
+    this.chatgptAbort = null;
     const q = this.q;
     this.q = null;
     this.input?.close();
@@ -389,6 +404,10 @@ export class Tutor {
   private async send(text: string, kind: "note" | "side" = "note") {
     this.setBusy(true);
     try {
+      if (getSession(this.sessionId)!.provider === "chatgpt") {
+        await this.sendChatGPT(text, kind);
+        return;
+      }
       const intro = await this.ensureConversation();
       this.textKind = kind;
       this.turnOk = false;
@@ -398,8 +417,32 @@ export class Tutor {
     }
   }
 
-  answer(questionId: string, answer: string) {
-    return this.send(`[ANSWER question_id=${questionId}]\n${answer}`);
+  private async sendChatGPT(text: string, kind: "note" | "side") {
+    const s = getSession(this.sessionId)!;
+    const controller = new AbortController();
+    this.chatgptAbort = controller;
+    this.topicDone = false;
+    const { definition } = createTopicServer(this.sessionId, this.emit, {
+      onTurnOk: () => {}, onFinishTopic: () => (this.topicDone = true),
+    });
+    try {
+      const reply = await chatgptTurn({ sessionId: this.sessionId, topicKey: s.current_topic!,
+        system: (MODES[s.mode] ?? MODES.adaptive!).topicPrompt,
+        blocks: [...await this.topicIntro(), { type: "text", text: `${text}\n\n${stateLine(this.sessionId)}` }] as any,
+        definition, side: kind === "side", signal: controller.signal });
+      if (reply?.trim()) {
+        addMessage(this.sessionId, "tutor", kind, reply.trim());
+        this.emit("tutor_text", { text: reply.trim(), kind });
+      }
+      this.emit("usage", usageView(this.sessionId));
+      if (this.topicDone) { this.topicDone = false; await this.advance(); }
+      else { this.setBusy(false); this.emit("snapshot"); }
+    } finally { if (this.chatgptAbort === controller) this.chatgptAbort = null; }
+  }
+
+  /** `notes` are app-added lines after the answer: local test results, whether the reference was viewed. */
+  answer(questionId: string, answer: string, notes: string[] = []) {
+    return this.send([`[ANSWER question_id=${questionId}]`, answer, ...notes].join("\n"));
   }
 
   control(kind: "CONFUSED" | "SKIP", questionId: string) {

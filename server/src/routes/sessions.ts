@@ -1,19 +1,25 @@
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { db, newId, now } from "../db/db";
-import { getSession, recordAttempt, sessionSnapshot } from "../db/repo";
+import { getQuestion, getSession, recordAttempt, sessionSnapshot } from "../db/repo";
 import { dropTutor, getTutor } from "../tutor/agent";
+import { providerStatus } from "../tutor/providers";
 import { MODES } from "../tutor/prompt";
+import { runTests, testSummary } from "../tutor/runner";
 
 export const sessions = new Hono();
 
 sessions.post("/", async (c) => {
-  const { setId, model, mode } = await c.req.json<{ setId: string; model?: string; mode?: string }>();
+  const { setId, model, mode, provider = "claude" } = await c.req.json<{ setId: string; model?: string; mode?: string; provider?: string }>();
+  if (provider !== "claude" && provider !== "chatgpt") return c.json({ error: "Unknown provider" }, 400);
+  if (provider === "chatgpt" && model) return c.json({ error: "ChatGPT uses the default Codex model" }, 400);
+  const status = (await providerStatus()).find(p => p.id === provider)!;
+  if (!status.available) return c.json({ error: status.hint }, 400);
   if (!db.query("SELECT 1 FROM sets WHERE id = ?").get(setId)) return c.json({ error: "Unknown set" }, 404);
   const id = newId();
   db.query(
-    "INSERT INTO sessions (id, set_id, mode, model, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-  ).run(id, setId, mode && MODES[mode] ? mode : "adaptive", model || null, now(), now());
+    "INSERT INTO sessions (id, set_id, mode, model, provider, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+  ).run(id, setId, mode && MODES[mode] ? mode : "adaptive", model || null, provider, now(), now());
   getTutor(id).begin();
   return c.json({ id });
 });
@@ -65,9 +71,35 @@ sessions.post("/:id/answer", async (c) => {
   if ("error" in g) return c.json({ error: g.error }, g.status);
   const { questionId, answer } = await c.req.json<{ questionId: string; answer: string }>();
   if (g.s.current_question_id !== questionId) return c.json({ error: "That question is no longer current" }, 409);
-  recordAttempt(questionId, answer);
-  getTutor(id).answer(questionId, answer);
-  return c.json({ ok: true });
+  const q = getQuestion(questionId)!;
+  // Run the hidden tests locally first so the grader gets their results with the answer.
+  const tests = q.harness ? await runTests(q.language, q.harness, answer) : null;
+  const notes = [
+    ...(tests ? [`[tests: ${testSummary(tests)}]`] : []),
+    ...(q.revealed ? ["[viewed reference]"] : []),
+  ];
+  recordAttempt(questionId, answer, tests ? testSummary(tests) : null);
+  getTutor(id).answer(questionId, answer, notes);
+  return c.json({ ok: true, tests });
+});
+
+/** Runs the question's hidden tests against a draft locally. No model call. */
+sessions.post("/:id/run", async (c) => {
+  const { questionId, code } = await c.req.json<{ questionId: string; code: string }>();
+  const q = getQuestion(questionId);
+  if (!q || q.session_id !== c.req.param("id")) return c.notFound();
+  if (!q.harness) return c.json({ error: "This question has no tests" }, 400);
+  return c.json(await runTests(q.language, q.harness, code));
+});
+
+/** Shows the hidden reference solution and rubric. No model call; the next answer notes it was viewed. */
+sessions.post("/:id/reveal", async (c) => {
+  const { questionId } = await c.req.json<{ questionId: string }>();
+  const q = getQuestion(questionId);
+  if (!q || q.session_id !== c.req.param("id")) return c.notFound();
+  if (!q.reference_md) return c.json({ error: "This question has no reference solution" }, 400);
+  db.query("UPDATE questions SET revealed = 1 WHERE id = ?").run(questionId);
+  return c.json({ referenceMd: q.reference_md, rubric: q.rubric ? JSON.parse(q.rubric) : [] });
 });
 
 sessions.post("/:id/control", async (c) => {

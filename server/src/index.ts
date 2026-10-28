@@ -3,7 +3,10 @@ import { logger } from "hono/logger";
 import { sessions } from "./routes/sessions";
 import { sets } from "./routes/sets";
 
+import { providerStatus } from "./tutor/providers";
+
 const app = new Hono();
+app.get("/api/providers", async (c) => c.json(await providerStatus()));
 app.use("/api/*", logger());
 app.get("/api/health", (c) => c.json({ ok: true }));
 app.route("/api/sets", sets);
