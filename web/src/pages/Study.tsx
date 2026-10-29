@@ -1,5 +1,14 @@
 import clsx from "clsx";
-import { ArrowLeft, BookOpen, FileText, MessageCircleQuestion, RotateCcw, Sparkles, Trophy, X } from "lucide-react";
+import {
+  ArrowLeft,
+  BookOpen,
+  FileText,
+  MessageCircleQuestion,
+  RotateCcw,
+  Sparkles,
+  Trophy,
+  X,
+} from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
@@ -18,18 +27,26 @@ import { StudyTimer } from "../components/StudyTimer";
 
 function Loading({ title, subtitle }: { title: string; subtitle: string }) {
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="card px-8 py-14 text-center">
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="card px-8 py-14 text-center"
+    >
       <div className="relative mx-auto mb-6 size-16">
-        <div className="absolute inset-0 animate-ping rounded-full bg-accent-500/20" />
+        <div className="absolute inset-0 rounded-full bg-accent-500/20" />
         <div className="relative flex size-16 items-center justify-center rounded-full bg-accent-500/15">
           <BookOpen className="size-7 text-accent-500" />
         </div>
       </div>
       <h2 className="text-lg font-semibold">{title}</h2>
-      <p className="mt-1 text-sm text-zinc-500">{subtitle}</p>
+      <p className="mt-1 text-sm text-study-muted">{subtitle}</p>
       <div className="mx-auto mt-8 max-w-md space-y-3">
         {[90, 75, 82].map((w, i) => (
-          <div key={i} className="h-3 animate-pulse rounded-full bg-zinc-200 dark:bg-white/5" style={{ width: `${w}%` }} />
+          <div
+            key={i}
+            className="h-3 rounded-full bg-study-raised"
+            style={{ width: `${w}%` }}
+          />
         ))}
       </div>
     </motion.div>
@@ -39,7 +56,20 @@ function Loading({ title, subtitle }: { title: string; subtitle: string }) {
 export default function Study() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { snap, pinned, feedback, scaffold, error, connect, submit, control, ask, jump, continueOn, clearError } = useStudy();
+  const {
+    snap,
+    pinned,
+    feedback,
+    scaffold,
+    error,
+    connect,
+    submit,
+    control,
+    ask,
+    jump,
+    continueOn,
+    clearError,
+  } = useStudy();
   const [panel, setPanel] = useState<PanelTab | null>(null);
 
   useEffect(() => connect(id!), [id, connect]);
@@ -53,35 +83,58 @@ export default function Study() {
   }
 
   const shown = pinned?.question ?? snap.current;
-  const topic = snap.topics.find((t) => t.key === (shown?.topicKey ?? snap.currentTopic));
-  const nextReady = !!pinned && (!snap.busy || snap.current?.id !== pinned.question.id);
+  const topic = snap.topics.find(
+    (t) => t.key === (shown?.topicKey ?? snap.currentTopic),
+  );
+  const nextReady =
+    !!pinned && (!snap.busy || snap.current?.id !== pinned.question.id);
   const lastNote = [...snap.messages].reverse().find((m) => m.kind === "note");
-  const done = snap.topics.filter((t) => !["pending", "active"].includes(t.status)).length;
+  const done = snap.topics.filter(
+    (t) => !["pending", "active", "paused"].includes(t.status),
+  ).length;
   const sourceTarget = shown?.sourceRef ?? null;
   const stack = pinned?.stack ?? snap.stack;
   // After a "retry" move the same question stays open: reopen the editor with the last answer to revise.
-  const retry = !!pinned && !snap.busy && snap.current?.id === pinned.question.id;
-  const revising = !pinned && snap.lastAttempt?.verdict && snap.lastAttempt.verdict !== "correct" ? snap.lastAttempt.answer : undefined;
-  const modeLabel = snap.mode !== "adaptive" ? MODES.find((m) => m.id === snap.mode)?.label : undefined;
+  const retry =
+    !!pinned && !snap.busy && snap.current?.id === pinned.question.id;
+  const revising =
+    !pinned &&
+    snap.lastAttempt?.verdict &&
+    snap.lastAttempt.verdict !== "correct"
+      ? snap.lastAttempt.answer
+      : undefined;
+  const modeLabel =
+    snap.mode !== "adaptive"
+      ? MODES.find((m) => m.id === snap.mode)?.label
+      : undefined;
 
   return (
-    <div className="app-bg flex h-full flex-col pb-10">
+    <div className="app-bg study-shell flex h-full flex-col pb-10">
       {/* top bar */}
-      <header className="sticky top-0 z-20 border-b border-zinc-200/70 bg-zinc-50/70 backdrop-blur dark:border-white/5 dark:bg-zinc-950/60">
-        <div className="flex h-14 items-center gap-3 px-4">
-          <Link to="/" className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-white">
+      <header className="sticky top-0 z-20 border-b border-study-line bg-study-surface">
+        <div className="study-header flex min-h-14 flex-wrap items-center gap-3 px-4 py-2">
+          <Link
+            to="/"
+            className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-sm text-study-muted hover:text-study-text"
+          >
             <ArrowLeft className="size-4" /> Library
           </Link>
-          <div className="h-5 w-px bg-zinc-200 dark:bg-white/10" />
+          <div className="h-5 w-px bg-study-raised" />
           <h1 className="truncate font-semibold">{snap.set.title}</h1>
-          {snap.id === id && <StudyTimer key={snap.set.id} setId={snap.set.id} active={snap.status === "active"} />}
+          {snap.id === id && (
+            <StudyTimer
+              key={snap.set.id}
+              setId={snap.set.id}
+              active={snap.status === "active"}
+            />
+          )}
           {modeLabel && (
-            <span className="hidden rounded-full bg-accent-500/10 px-2 py-0.5 text-xs font-medium text-accent-700 sm:inline dark:text-accent-300">
+            <span className="hidden rounded-md bg-study-raised px-2 py-0.5 text-xs font-medium text-accent-700 sm:inline dark:text-accent-300">
               {modeLabel}
             </span>
           )}
           {snap.topics.length > 0 && (
-            <span className="hidden text-xs tabular-nums text-zinc-500 sm:inline">
+            <span className="hidden text-xs tabular-nums text-study-muted sm:inline">
               {done}/{snap.topics.length} topics
             </span>
           )}
@@ -91,7 +144,7 @@ export default function Study() {
               value={snap.currentTopic ?? ""}
               disabled={snap.busy}
               onChange={(e) => jump(e.target.value)}
-              className="max-w-48 truncate rounded-lg border border-zinc-200 bg-white px-2 py-1 text-xs outline-none disabled:opacity-60 lg:hidden dark:border-white/10 dark:bg-zinc-900"
+              className="max-w-48 truncate rounded-lg border border-study-line bg-study-surface px-2 py-1 text-xs outline-none disabled:opacity-60 lg:hidden"
               aria-label="Jump to topic"
             >
               {snap.topics.map((t) => (
@@ -103,11 +156,23 @@ export default function Study() {
           )}
           <span className="flex-1" />
           {snap.busy && <ThinkingDots label="Tutor is thinking" />}
-          <Button variant={panel === "source" ? "secondary" : "ghost"} size="sm" onClick={() => setPanel(panel === "source" ? null : "source")}>
-            <FileText className="size-4" /> <span className="hidden md:inline">Source</span>
+          <Button
+            variant={panel === "source" ? "secondary" : "ghost"}
+            size="sm"
+            aria-label="Source"
+            onClick={() => setPanel(panel === "source" ? null : "source")}
+          >
+            <FileText className="size-4" />{" "}
+            <span className="hidden md:inline">Source</span>
           </Button>
-          <Button variant={panel === "ask" ? "secondary" : "ghost"} size="sm" onClick={() => setPanel(panel === "ask" ? null : "ask")}>
-            <MessageCircleQuestion className="size-4" /> <span className="hidden md:inline">Ask</span>
+          <Button
+            variant={panel === "ask" ? "secondary" : "ghost"}
+            size="sm"
+            aria-label="Ask tutor"
+            onClick={() => setPanel(panel === "ask" ? null : "ask")}
+          >
+            <MessageCircleQuestion className="size-4" />{" "}
+            <span className="hidden md:inline">Ask</span>
           </Button>
           <ThemeToggle />
         </div>
@@ -118,28 +183,38 @@ export default function Study() {
         )}
       </header>
 
-      <div className="flex min-h-0 flex-1 gap-6 px-4 py-6 lg:px-6">
+      <div className="study-layout flex min-h-0 flex-1">
         {/* topics */}
-        <aside className="hidden w-60 shrink-0 overflow-y-auto lg:block">
+        <aside className="topic-sidebar hidden w-56 shrink-0 overflow-y-auto lg:block">
           {snap.topics.length > 0 && (
-            <TopicRail topics={snap.topics} current={snap.currentTopic} busy={snap.busy} onSelect={jump} />
+            <TopicRail
+              topics={snap.topics}
+              current={snap.currentTopic}
+              busy={snap.busy}
+              onSelect={jump}
+            />
           )}
         </aside>
 
         {/* main */}
-        <main className="min-w-0 flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-3xl space-y-4 pb-24">
+        <main className="study-main min-w-0 flex-1 overflow-y-auto">
+          <div className="mx-auto max-w-[650px] space-y-4 pb-24">
             <AnimatePresence>
               {error && (
                 <motion.div
-                  initial={{ opacity: 0, y: -8 }}
+                  initial={{ opacity: 0 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0 }}
-                  className="flex items-center gap-3 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-700 dark:text-rose-300"
+                  role="alert"
+                  className="flex items-center gap-3 rounded-md border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger dark:text-danger"
                 >
                   <span className="flex-1">{error}</span>
                   {!snap.busy && (
-                    <Button size="sm" variant="ghost" onClick={() => (clearError(), api.retry(snap.id))}>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => (clearError(), api.retry(snap.id))}
+                    >
                       <RotateCcw className="size-4" /> Retry
                     </Button>
                   )}
@@ -151,26 +226,50 @@ export default function Study() {
             </AnimatePresence>
 
             {snap.status === "finished" && !pinned ? (
-              <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} className="card px-8 py-12 text-center">
-                <Trophy className="mx-auto mb-4 size-12 text-amber-500" />
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="card px-8 py-12 text-center"
+              >
+                <Trophy className="mx-auto mb-4 size-12 text-warning" />
                 <h2 className="text-2xl font-semibold">Session complete</h2>
-                <p className="mt-2 text-zinc-500">You worked through all {snap.topics.length} topics.</p>
-                <Button variant="primary" size="lg" className="mt-6" onClick={() => navigate(`/study/${snap.id}/summary`)}>
+                <p className="mt-2 text-study-muted">
+                  You worked through all {snap.topics.length} topics.
+                </p>
+                <Button
+                  variant="primary"
+                  size="lg"
+                  className="mt-6"
+                  onClick={() => navigate(`/study/${snap.id}/summary`)}
+                >
                   View summary
                 </Button>
               </motion.div>
             ) : !shown ? (
               snap.busy ? (
                 snap.topics.length ? (
-                  <Loading title={topic ? `Starting: ${topic.title}` : "Starting the next topic"} subtitle="Loading just this topic's pages…" />
+                  <Loading
+                    title={
+                      topic
+                        ? `Starting: ${topic.title}`
+                        : "Starting the next topic"
+                    }
+                    subtitle="Loading just this topic's pages…"
+                  />
                 ) : (
-                  <Loading title="Reading your material" subtitle="Mapping out topics. This happens once per study set." />
+                  <Loading
+                    title="Reading your material"
+                    subtitle="Mapping out topics. This happens once per study set."
+                  />
                 )
               ) : (
-                <div className="card px-8 py-12 text-center text-zinc-500">
+                <div className="card px-8 py-12 text-center text-study-muted">
                   The tutor stopped before asking a question.
                   <div className="mt-4">
-                    <Button variant="primary" onClick={() => api.retry(snap.id)}>
+                    <Button
+                      variant="primary"
+                      onClick={() => api.retry(snap.id)}
+                    >
                       <RotateCcw className="size-4" /> Retry
                     </Button>
                   </div>
@@ -180,20 +279,24 @@ export default function Study() {
               <>
                 <ScaffoldBreadcrumb stack={stack} current={shown} />
                 <AnimatePresence>
-                  {scaffold?.direction === "down" && scaffold.reason && shown.depth > 0 && !pinned && (
-                    <motion.div
-                      key={scaffold.at}
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: "auto" }}
-                      exit={{ opacity: 0, height: 0 }}
-                      className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-2.5 text-sm text-amber-800 dark:text-amber-200"
-                    >
-                      <span className="font-medium">Building up:</span> {scaffold.reason}
-                    </motion.div>
-                  )}
+                  {scaffold?.direction === "down" &&
+                    scaffold.reason &&
+                    shown.depth > 0 &&
+                    !pinned && (
+                      <motion.div
+                        key={scaffold.at}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="rounded-md border border-warning/20 bg-warning/5 px-4 py-2.5 text-sm text-warning dark:text-warning"
+                      >
+                        <span className="font-medium">Building up:</span>{" "}
+                        {scaffold.reason}
+                      </motion.div>
+                    )}
                 </AnimatePresence>
                 {!pinned && lastNote && (
-                  <div className="flex items-start gap-2 px-1 text-sm text-zinc-500 dark:text-zinc-400">
+                  <div className="flex items-start gap-2 px-1 text-sm text-study-muted">
                     <Sparkles className="mt-0.5 size-4 shrink-0 text-accent-400" />
                     <span>{lastNote.text}</span>
                   </div>
@@ -207,7 +310,10 @@ export default function Study() {
                   >
                     {pinned ? (
                       <div className="space-y-4">
-                        <YourAnswer answer={pinned.answer} question={pinned.question} />
+                        <YourAnswer
+                          answer={pinned.answer}
+                          question={pinned.question}
+                        />
                         {feedback ? (
                           <FeedbackCard
                             feedback={feedback}
@@ -229,16 +335,34 @@ export default function Study() {
                           disabled={snap.busy}
                           initial={revising ?? undefined}
                           onSubmit={submit}
-                          onRun={(code) => api.runTests(snap.id, shown.id, code)}
+                          onRun={(code) =>
+                            api.runTests(snap.id, shown.id, code)
+                          }
                         />
-                        <div className={clsx("mt-3 flex flex-wrap justify-end gap-1", snap.busy && "pointer-events-none opacity-50")}>
-                          <Button variant="ghost" size="sm" onClick={() => control("CONFUSED")}>
+                        <div
+                          className={clsx(
+                            "mt-3 flex flex-wrap justify-end gap-1",
+                            snap.busy && "pointer-events-none opacity-50",
+                          )}
+                        >
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => control("CONFUSED")}
+                          >
                             I don't know where to start
                           </Button>
-                          <Button variant="ghost" size="sm" onClick={() => control("SKIP")}>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => control("SKIP")}
+                          >
                             Skip
                           </Button>
-                          <ReferencePanel sessionId={snap.id} question={shown} />
+                          <ReferencePanel
+                            sessionId={snap.id}
+                            question={shown}
+                          />
                         </div>
                       </>
                     )}
@@ -253,13 +377,13 @@ export default function Study() {
         <AnimatePresence>
           {panel && (
             <motion.div
-              initial={{ opacity: 0, x: 24, width: 0 }}
-              animate={{ opacity: 1, x: 0, width: 440 }}
-              exit={{ opacity: 0, x: 24, width: 0 }}
-              transition={{ type: "spring", stiffness: 260, damping: 30 }}
-              className="hidden shrink-0 md:block"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="study-panel shrink-0"
             >
-              <div className="h-[calc(100vh-10rem)] w-[440px]">
+              <div className="h-full w-full">
                 <SidePanel
                   tab={panel}
                   setTab={setPanel}
@@ -275,7 +399,13 @@ export default function Study() {
           )}
         </AnimatePresence>
       </div>
-      {snap.usage && <UsageBar usage={snap.usage} busy={snap.busy} provider={snap.provider} />}
+      {snap.usage && (
+        <UsageBar
+          usage={snap.usage}
+          busy={snap.busy}
+          provider={snap.provider}
+        />
+      )}
     </div>
   );
 }

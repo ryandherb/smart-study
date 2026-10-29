@@ -21,7 +21,7 @@ export function Difficulty({ value }: { value: number | null }) {
           key={i}
           className={clsx(
             "h-2.5 w-1.5 rounded-full",
-            i <= value ? "bg-accent-500" : "bg-zinc-200 dark:bg-white/10",
+            i <= value ? "bg-accent-500" : "bg-study-raised",
           )}
         />
       ))}
@@ -44,17 +44,24 @@ export function QuestionCard({
   return (
     <motion.article
       key={question.id}
-      initial={{ opacity: 0, y: 16, scale: 0.99 }}
+      initial={{ opacity: 0 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, y: -12 }}
-      transition={{ type: "spring", stiffness: 260, damping: 26 }}
-      className={clsx("card overflow-hidden", scaffold && "ring-1 ring-amber-500/25")}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.15 }}
+      className={clsx(
+        "question-content min-w-0",
+        scaffold && "scaffold-question",
+      )}
     >
-      <header className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-zinc-100 px-6 py-3 text-xs text-zinc-500 dark:border-white/5 dark:text-zinc-400">
-        {topicTitle && <span className="font-medium text-zinc-700 dark:text-zinc-200">{topicTitle}</span>}
-        <span className="rounded-full bg-zinc-100 px-2 py-0.5 dark:bg-white/5">{TYPE_LABEL[question.type]}</span>
+      <header className="flex flex-wrap items-center gap-x-3 gap-y-1 pb-6 text-xs text-study-muted">
+        {topicTitle && (
+          <span className="font-medium text-study-text">{topicTitle}</span>
+        )}
+        <span className="rounded-md bg-study-raised px-2 py-0.5">
+          {TYPE_LABEL[question.type]}
+        </span>
         {scaffold && (
-          <span className="rounded-full bg-amber-500/15 px-2 py-0.5 font-medium text-amber-700 dark:text-amber-300">
+          <span className="rounded-md bg-study-raised px-2 py-0.5 font-medium text-warning dark:text-warning">
             Stepping stone
           </span>
         )}
@@ -63,7 +70,7 @@ export function QuestionCard({
         {question.sourceRef && onSource && (
           <button
             onClick={onSource}
-            className="flex items-center gap-1 rounded-md px-1.5 py-0.5 transition hover:bg-zinc-100 hover:text-zinc-800 dark:hover:bg-white/5 dark:hover:text-zinc-100"
+            className="flex items-center gap-1 rounded-md px-1.5 py-0.5 transition hover:bg-study-surface hover:text-study-text"
           >
             <FileText className="size-3.5" />
             {question.sourceRef.file}
@@ -71,10 +78,13 @@ export function QuestionCard({
           </button>
         )}
       </header>
-      <div className="px-6 py-6 sm:px-8">
-        <Markdown className="text-[1.05rem] leading-relaxed">{question.promptMd}</Markdown>
+      <div className="pb-8">
+        <p className="mb-3 text-xs font-medium text-accent-500">
+          {scaffold ? "Stepping-stone question" : "Question"}
+        </p>
+        <Markdown className="question-prose">{question.promptMd}</Markdown>
       </div>
-      {children && <div className="px-6 pb-6 sm:px-8">{children}</div>}
+      {children && <div className="pb-6">{children}</div>}
     </motion.article>
   );
 }

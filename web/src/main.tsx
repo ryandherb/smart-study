@@ -1,4 +1,5 @@
-import Homework from './pages/Homework';
+import { MotionConfig } from "motion/react";
+import Homework from "./pages/Homework";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
@@ -9,13 +10,15 @@ import Summary from "./pages/Summary";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <BrowserRouter>
-      <Routes>
-        <Route path="/homework/:id" element={<Homework />} />
-        <Route path="/" element={<Library />} />
-        <Route path="/study/:id" element={<Study />} />
-        <Route path="/study/:id/summary" element={<Summary />} />
-      </Routes>
-    </BrowserRouter>
+    <MotionConfig reducedMotion="user" transition={{ duration: 0.15 }}>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/homework/:id" element={<Homework />} />
+          <Route path="/" element={<Library />} />
+          <Route path="/study/:id" element={<Study />} />
+          <Route path="/study/:id/summary" element={<Summary />} />
+        </Routes>
+      </BrowserRouter>
+    </MotionConfig>
   </StrictMode>,
 );

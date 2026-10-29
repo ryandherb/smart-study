@@ -7,17 +7,26 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 
 /** Markdown with GFM, KaTeX math and highlighted code. */
-export const Markdown = memo(function Markdown({ children, className }: { children: string; className?: string }) {
+export const Markdown = memo(function Markdown({
+  children,
+  className,
+}: {
+  children: string;
+  className?: string;
+}) {
   return (
     <div
       className={clsx(
-        "md prose prose-zinc max-w-none dark:prose-invert prose-pre:p-4 prose-headings:font-semibold",
+        "md prose prose-zinc max-w-none dark:prose-invert prose-pre:p-4 prose-headings:font-medium",
         className,
       )}
     >
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkMath]}
-        rehypePlugins={[rehypeKatex, [rehypeHighlight, { detect: true, ignoreMissing: true }]]}
+        rehypePlugins={[
+          rehypeKatex,
+          [rehypeHighlight, { detect: true, ignoreMissing: true }],
+        ]}
       >
         {children}
       </ReactMarkdown>

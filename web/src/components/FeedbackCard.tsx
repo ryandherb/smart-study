@@ -1,5 +1,13 @@
 import clsx from "clsx";
-import { ArrowRight, CheckCircle2, CircleAlert, HelpCircle, PencilLine, SkipForward, XCircle } from "lucide-react";
+import {
+  ArrowRight,
+  CheckCircle2,
+  CircleAlert,
+  HelpCircle,
+  PencilLine,
+  SkipForward,
+  XCircle,
+} from "lucide-react";
 import { motion } from "motion/react";
 import { useEffect } from "react";
 import type { Feedback, Question, TestResult } from "../lib/api";
@@ -11,28 +19,39 @@ const STYLE = {
   correct: {
     icon: CheckCircle2,
     title: "Correct!",
-    box: "border-emerald-500/30 bg-emerald-500/[0.07]",
-    text: "text-emerald-600 dark:text-emerald-400",
+    box: "border-study-line",
+    text: "text-success dark:text-success",
   },
   partial: {
     icon: CircleAlert,
     title: "Partially right",
-    box: "border-amber-500/30 bg-amber-500/[0.07]",
-    text: "text-amber-600 dark:text-amber-400",
+    box: "border-study-line",
+    text: "text-warning dark:text-warning",
   },
   incorrect: {
     icon: XCircle,
     title: "Not quite",
-    box: "border-rose-500/30 bg-rose-500/[0.07]",
-    text: "text-rose-600 dark:text-rose-400",
+    box: "border-study-line",
+    text: "text-danger dark:text-danger",
   },
 };
 
-export function YourAnswer({ answer, question }: { answer: string; question: Question }) {
-  const md = question.type === "code" ? "```" + (question.language ?? "") + "\n" + answer + "\n```" : answer;
+export function YourAnswer({
+  answer,
+  question,
+}: {
+  answer: string;
+  question: Question;
+}) {
+  const md =
+    question.type === "code"
+      ? "```" + (question.language ?? "") + "\n" + answer + "\n```"
+      : answer;
   return (
-    <div className="rounded-xl bg-zinc-100/80 px-4 py-3 dark:bg-white/5">
-      <div className="mb-1 text-[11px] font-medium uppercase tracking-wider text-zinc-400">Your answer</div>
+    <div className="rounded-md bg-study-surface px-4 py-3">
+      <div className="mb-1 text-[11px] font-medium uppercase tracking-wider text-study-muted">
+        Your answer
+      </div>
       <Markdown className="prose-sm">{md}</Markdown>
     </div>
   );
@@ -61,8 +80,10 @@ export function FeedbackCard({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement)?.closest("input, textarea, .cm-editor")) return;
-      if ((e.key === "Enter" || e.key.toLowerCase() === "n") && nextReady) onContinue();
+      if ((e.target as HTMLElement)?.closest("input, textarea, .cm-editor"))
+        return;
+      if ((e.key === "Enter" || e.key.toLowerCase() === "n") && nextReady)
+        onContinue();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -70,19 +91,26 @@ export function FeedbackCard({
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 12 }}
+      role="status"
+      initial={{ opacity: 0 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ type: "spring", stiffness: 300, damping: 24 }}
-      className={clsx("rounded-2xl border p-5", s.box)}
+      transition={{ duration: 0.15 }}
+      className={clsx("feedback-content border-t py-6", s.box)}
     >
-      <div className={clsx("mb-3 flex items-center gap-2 font-semibold", s.text)}>
-        <motion.span initial={{ scale: 0.4, rotate: -20 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: "spring", stiffness: 400, damping: 12 }}>
+      <div
+        className={clsx("mb-3 flex items-center gap-2 font-semibold", s.text)}
+      >
+        <motion.span
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.15 }}
+        >
           <Icon className="size-5" />
         </motion.span>
         {s.title}
         {tests && <TestChip result={tests} />}
         {feedback.misconception && feedback.verdict !== "correct" && (
-          <span className="ml-2 truncate rounded-full bg-white/60 px-2.5 py-0.5 text-xs font-medium text-zinc-600 dark:bg-black/20 dark:text-zinc-300">
+          <span className="ml-2 truncate rounded-md bg-study-raised px-2.5 py-0.5 text-xs font-medium text-study-muted">
             {feedback.misconception}
           </span>
         )}
@@ -98,7 +126,10 @@ export function FeedbackCard({
                 </>
               ) : (
                 <>
-                  {feedback.verdict === "correct" ? "Continue" : "Try an easier step"} <ArrowRight className="size-4" />
+                  {feedback.verdict === "correct"
+                    ? "Continue"
+                    : "Try an easier step"}{" "}
+                  <ArrowRight className="size-4" />
                 </>
               )}
               <Kbd>N</Kbd>
@@ -108,7 +139,11 @@ export function FeedbackCard({
           )}
         </Button>
         {feedback.verdict === "correct" ? null : (
-          <Button variant="ghost" onClick={onConfused} title="Ask the tutor to break it down further">
+          <Button
+            variant="ghost"
+            onClick={onConfused}
+            title="Ask the tutor to break it down further"
+          >
             <HelpCircle className="size-4" /> I'm still confused
           </Button>
         )}
