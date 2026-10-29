@@ -5,6 +5,7 @@ export type Verdict = "correct" | "partial" | "incorrect";
 export interface SessionRow {
   id: string;
   set_id: string;
+  focus_topic_key: string | null;
   mode: string;
   model: string | null;
   provider: "claude" | "chatgpt";

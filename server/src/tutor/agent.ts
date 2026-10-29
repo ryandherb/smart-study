@@ -153,9 +153,12 @@ export class Tutor {
     const mode = MODES[modeId] ?? MODES.adaptive!;
     const { server, toolIds, definition } = createPlanServer(setId, () => (this.turnOk = true));
     const files = db.query<{ id: string; name: string }, [string]>("SELECT id, name FROM files WHERE set_id = ?").all(setId);
+    const sourceText = db.query<{ source_text: string | null }, [string]>("SELECT source_text FROM sets WHERE id = ?").get(setId)?.source_text;
     const content = [
       ...(await fileBlocks(files.map((f) => f.id))),
-      { type: "text", text: `Files: ${files.map((f) => f.name).join(", ")}. Build the study plan.` },
+      { type: "text", text: sourceText
+        ? `Student's study request:\n${sourceText}\n\nFiles: ${files.map((f) => f.name).join(", ") || "none"}. Build the study plan from this request and any attached files.`
+        : `Files: ${files.map((f) => f.name).join(", ")}. Build the study plan.` },
     ] as Content;
 
     if (getSession(this.sessionId)!.provider === "chatgpt") {
@@ -201,8 +204,8 @@ export class Tutor {
       const s = getSession(this.sessionId)!;
       db.query(
         `INSERT OR IGNORE INTO topics (session_id, key, title, notes, pages, difficulty, status, order_idx)
-         SELECT ?, key, title, notes, pages, difficulty, 'pending', order_idx FROM set_topics WHERE set_id = ?`,
-      ).run(this.sessionId, s.set_id);
+         SELECT ?, key, title, notes, pages, difficulty, 'pending', order_idx FROM set_topics WHERE set_id = ? AND (? IS NULL OR key = ?)`,
+      ).run(this.sessionId, s.set_id, s.focus_topic_key, s.focus_topic_key);
       updateSession(this.sessionId, { flow: "topic" });
       this.emit("snapshot");
       await this.advance();
@@ -306,7 +309,9 @@ export class Tutor {
 
     const done = topics.filter((x) => !["pending", "active"].includes(x.status));
     const open = s.current_question_id ? getQuestion(s.current_question_id) : null;
+    const sourceText = db.query<{ source_text: string | null }, [string]>("SELECT source_text FROM sets WHERE id = ?").get(s.set_id)?.source_text;
     const brief = [
+      sourceText ? `Student's study request: ${sourceText}\nUse this scope and level for the current topic. When no pages are attached, create original self-contained problems; do not invent source references.` : "",
       `Topic ${idx + 1} of ${topics.length}: ${t.title}`,
       t.notes ? `Notes: ${t.notes}` : "",
       done.length ? `Earlier topics: ${done.map((x) => `${x.title} (${x.status})`).join("; ")}` : "",

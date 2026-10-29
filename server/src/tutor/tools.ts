@@ -30,7 +30,7 @@ export function createPlanServer(setId: string, onSaved: () => void) {
             notes: z.string().describe("2–4 sentences for the tutor: which problems, key ideas, pitfalls"),
             pages: z
               .array(z.object({ file: z.string(), page: z.number().int().min(1) }))
-              .min(1)
+              .min(files.length ? 1 : 0)
               .max(4),
             difficulty: z.number().int().min(1).max(5).optional(),
           }),

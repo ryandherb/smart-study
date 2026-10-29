@@ -2,6 +2,7 @@ export const SCHEMA = `
 CREATE TABLE IF NOT EXISTS sets (
   id TEXT PRIMARY KEY,
   title TEXT NOT NULL,
+  source_text TEXT,
   created_at INTEGER NOT NULL
 );
 

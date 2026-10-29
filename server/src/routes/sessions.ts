@@ -15,7 +15,7 @@ const DEFAULT_MODELS: Record<"claude" | "chatgpt", string> = {
 };
 
 sessions.post("/", async (c) => {
-  const { setId, model, mode, provider = "claude" } = await c.req.json<{ setId: string; model?: string; mode?: string; provider?: string }>();
+  const { setId, model, mode, focusTopicKey, provider = "claude" } = await c.req.json<{ setId: string; focusTopicKey?: string; model?: string; mode?: string; provider?: string }>();
   if (provider !== "claude" && provider !== "chatgpt") return c.json({ error: "Unknown provider" }, 400);
   if (model !== undefined && typeof model !== "string") return c.json({ error: "Model must be a string" }, 400);
   const resolvedModel = model?.trim() || DEFAULT_MODELS[provider];
@@ -24,10 +24,12 @@ sessions.post("/", async (c) => {
   const status = (await providerStatus()).find(p => p.id === provider)!;
   if (!status.available) return c.json({ error: status.hint }, 400);
   if (!db.query("SELECT 1 FROM sets WHERE id = ?").get(setId)) return c.json({ error: "Unknown set" }, 404);
+  if (focusTopicKey !== undefined && (typeof focusTopicKey !== "string" || !db.query("SELECT 1 FROM set_topics WHERE set_id = ? AND key = ?").get(setId, focusTopicKey))) return c.json({ error: "Unknown focus topic" }, 400);
+  if (db.query("SELECT 1 FROM sessions WHERE set_id=? AND mode='homework'").get(setId)) return c.json({error:'Open this homework workspace from the library'},400);
   const id = newId();
   db.query(
-    "INSERT INTO sessions (id, set_id, mode, model, provider, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-  ).run(id, setId, mode && MODES[mode] ? mode : "adaptive", resolvedModel, provider, now(), now());
+    "INSERT INTO sessions (id, set_id, mode, model, provider, created_at, updated_at, focus_topic_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+  ).run(id, setId, mode && MODES[mode] ? mode : "adaptive", resolvedModel, provider, now(), now(), focusTopicKey ?? null);
   getTutor(id).begin();
   return c.json({ id });
 });

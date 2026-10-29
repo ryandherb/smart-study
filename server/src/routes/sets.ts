@@ -10,7 +10,7 @@ const MAX_PDF_BYTES = 30 * 1024 * 1024;
 sets.get("/", (c) => {
   const rows = db
     .query<any, []>(
-      `SELECT s.id, s.title, s.created_at,
+      `SELECT s.id, s.title, s.created_at, s.source_text,
         (SELECT COALESCE(SUM(elapsed_ms), 0) FROM study_time WHERE set_id = s.id) AS study_time_ms,
         (SELECT COUNT(*) FROM files f WHERE f.set_id = s.id) AS file_count,
         (SELECT json_group_array(name) FROM files f WHERE f.set_id = s.id) AS file_names
@@ -26,12 +26,13 @@ sets.get("/", (c) => {
      WHERE se.id = (SELECT id FROM sessions WHERE set_id = ? ORDER BY updated_at DESC LIMIT 1)`,
   );
   const sessions = db.query<any, [string]>(
-    "SELECT id, status, created_at, updated_at, provider, model FROM sessions WHERE set_id = ? ORDER BY updated_at DESC",
+    "SELECT id, mode, status, created_at, updated_at, provider, model FROM sessions WHERE set_id = ? ORDER BY updated_at DESC",
   );
   return c.json(
     rows.map((r) => ({
       id: r.id,
       title: r.title,
+      sourceText: r.source_text,
       createdAt: r.created_at,
       studyTimeMs: r.study_time_ms,
       files: JSON.parse(r.file_names),
@@ -62,17 +63,21 @@ sets.post("/:id/time", async (c) => {
 sets.post("/", async (c) => {
   const form = await c.req.formData();
   const files = form.getAll("files").filter((f): f is File => f instanceof File);
-  if (!files.length) return c.json({ error: "Upload at least one PDF." }, 400);
+  const rawText = form.get("sourceText");
+  if (rawText !== null && typeof rawText !== "string") return c.json({ error: "Topics must be text." }, 400);
+  const sourceText = (rawText ?? "").replace(/\r\n?/g, "\n").trim();
+  if (sourceText.length > 10000) return c.json({ error: "Keep topics under 10,000 characters." }, 400);
+  if (!files.length && !sourceText) return c.json({ error: "Upload a PDF or enter topics to study." }, 400);
   for (const f of files) {
     if (!f.name.toLowerCase().endsWith(".pdf")) return c.json({ error: `${f.name} is not a PDF.` }, 400);
     if (f.size > MAX_PDF_BYTES) return c.json({ error: `${f.name} is larger than 30 MB.` }, 400);
   }
   const id = newId();
-  const title = String(form.get("title") || files[0]!.name.replace(/\.pdf$/i, ""));
+  const title = String(form.get("title") || files[0]?.name.replace(/\.pdf$/i, "") || sourceText.split("\n")[0]!.slice(0, 80));
   const dir = join(DATA_DIR, "sets", id);
   mkdirSync(dir, { recursive: true });
 
-  db.query("INSERT INTO sets (id, title, created_at) VALUES (?, ?, ?)").run(id, title, now());
+  db.query("INSERT INTO sets (id, title, source_text, created_at) VALUES (?, ?, ?, ?)").run(id, title, sourceText || null, now());
   for (const f of files) {
     const fileId = newId();
     const path = join(dir, `${fileId}.pdf`);
@@ -99,4 +104,25 @@ sets.get("/files/:fileId", (c) => {
   const f = db.query<any, [string]>("SELECT * FROM files WHERE id = ?").get(c.req.param("fileId"));
   if (!f) return c.notFound();
   return new Response(Bun.file(f.path), { headers: { "Content-Type": "application/pdf" } });
+});
+
+sets.get("/:id/recommendation", (c) => {
+  const id = c.req.param("id");
+  if (!db.query("SELECT 1 FROM sets WHERE id = ?").get(id)) return c.json({ error: "Unknown set" }, 404);
+  const topics = db.query<{ key: string; title: string; order_idx: number }, [string]>("SELECT key, title, order_idx FROM set_topics WHERE set_id = ? ORDER BY order_idx").all(id);
+  const ranked = topics.map(t => {
+    const qs = db.query<{ revealed: number; verdict: string; created_at: number }, [string, string]>(`
+      SELECT q.revealed, a.verdict, a.created_at FROM questions q
+      JOIN sessions s ON s.id = q.session_id
+      JOIN attempts a ON a.id = (SELECT id FROM attempts WHERE question_id = q.id AND verdict IS NOT NULL ORDER BY created_at, id LIMIT 1)
+      WHERE s.set_id = ? AND q.topic_key = ? AND q.depth = 0
+      ORDER BY q.created_at DESC, q.id DESC LIMIT 3`).all(id, t.key);
+    const correct = qs.filter(q => q.verdict === "correct" && !q.revealed).length;
+    const accuracy = qs.length ? correct / qs.length : 0;
+    const group = !qs.length ? 1 : accuracy < 0.5 ? 0 : 2;
+    return { ...t, group, accuracy, last: Math.max(0, ...qs.map(q => q.created_at)),
+      reason: qs.length ? `Solved ${correct} of your last ${qs.length} questions independently` : "You haven’t practiced this topic yet." };
+  }).sort((a, b) => a.group - b.group || (a.group === 0 ? a.accuracy - b.accuracy : 0) || a.last - b.last || a.order_idx - b.order_idx);
+  const next = ranked[0];
+  return c.json(next ? { topicKey: next.key, title: next.title, reason: next.reason, label: next.group === 2 ? "Review next" : "Study this next" } : null);
 });

@@ -22,7 +22,7 @@ beforeAll(async () => {
   await Bun.write(join(bin, "mock-codex.js"), `#!${bun}\nconst args = process.argv.slice(2);\nawait Bun.write(${JSON.stringify(join(dir, "last-args"))}, JSON.stringify(args));\nif (args[0] === 'login') { console.error('Logged in using ChatGPT'); process.exit(0); }\nconst prompt = await Bun.stdin.text();\nawait Bun.write(${JSON.stringify(join(dir, "last-prompt"))}, prompt);\nawait Bun.write(args[args.indexOf('-o') + 1], await Bun.file(${JSON.stringify(responseFile)}).text());\nconsole.log(JSON.stringify({type:'turn.completed', usage:{input_tokens:100, cached_input_tokens:30, output_tokens:20}}));\n`);
   await chmod(join(bin, "mock-codex.js"), 0o755);
 
-  db.query("INSERT INTO sets VALUES (?, ?, ?)").run("set", "Study", Date.now());
+  db.query("INSERT INTO sets (id, title, created_at) VALUES (?, ?, ?)").run("set", "Study", Date.now());
   db.query("INSERT INTO sessions (id, set_id, provider, created_at, updated_at) VALUES (?, ?, ?, ?, ?)").run("session", "set", "chatgpt", Date.now(), Date.now());
   const pdf = await PDFDocument.create(); pdf.addPage();
   const path = join(dir, "exam.pdf"); await Bun.write(path, await pdf.save());
@@ -169,7 +169,7 @@ test("study time persists per set and retries or older reports do not double cou
   const report = (setId: string, body: unknown) => sets.request(`/${setId}/time`, {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
   });
-  db.query("INSERT INTO sets VALUES (?, ?, ?)").run("timed-set", "Timed", 0);
+  db.query("INSERT INTO sets (id, title, created_at) VALUES (?, ?, ?)").run("timed-set", "Timed", 0);
   try {
     expect(await (await report("timed-set", { trackerId: "tab-1", elapsedMs: 1000 })).json()).toEqual({ studyTimeMs: 1000 });
     expect(await (await report("timed-set", { trackerId: "tab-1", elapsedMs: 1000 })).json()).toEqual({ studyTimeMs: 1000 });
@@ -186,4 +186,28 @@ test("study time persists per set and retries or older reports do not double cou
     db.query("DELETE FROM sets WHERE id = ?").run("timed-set");
     expect(db.query<{ n: number }, []>("SELECT COUNT(*) AS n FROM study_time WHERE set_id = 'timed-set'").get()!.n).toBe(0);
   } finally { db.query("DELETE FROM sets WHERE id = ?").run("timed-set"); }
+});
+
+
+test("creates and reopens text-only study sets and rejects invalid input", async () => {
+  const { sets } = await import("../src/routes/sets");
+  const create = (text: string) => {
+    const form = new FormData(); form.set("sourceText", text);
+    return sets.request("/", { method: "POST", body: form });
+  };
+  expect((await create("   ")).status).toBe(400);
+  expect((await create("x".repeat(10001))).status).toBe(400);
+  const response = await create("  Recursion\nBinary trees  ");
+  expect(response.status).toBe(200);
+  const { id } = await response.json() as { id: string };
+  const list = await (await sets.request("/")).json() as any[];
+  const saved = list.find(s => s.id === id);
+  expect(saved.sourceText).toBe("Recursion\nBinary trees");
+  expect(saved.title).toBe("Recursion");
+  expect(saved.files).toEqual([]);
+
+  const { definition } = createPlanServer(id, () => {});
+  await respond({ arguments: { topics: [{ id: "recursion", title: "Recursion", notes: "Introductory recursion problems", pages: [] }] } });
+  await turn(definition);
+  expect(db.query<any, [string]>("SELECT pages FROM set_topics WHERE set_id = ?").get(id)?.pages).toBe("[]");
 });
