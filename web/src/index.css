@@ -292,23 +292,33 @@ footer {
   padding: 12px;
 }
 .rainbow-text {
-  font-size: 8;
-  font-weight: bold;
+  font-weight: 800;
+  line-height: 1.6;
+  color: var(--study-text);
+  --rainbow-colors: #ff3030, #ff8700, #ffe600, #32ed46, #2785ff, #9955ff, #ff35c5;
+  --rainbow-outline: #303040;
   background: linear-gradient(
     90deg,
-    #ff0000,
-    #ff7f00,
-    #ffff00,
-    #00ff00,
-    #0000ff,
-    #4b0082,
-    #8b0082
+    var(--rainbow-colors)
   );
-  background-size: 50% auto;
+  background-size: 100% auto;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  animation: bounce 1s ease infinite;
+  -webkit-text-stroke: 0.7px var(--rainbow-outline);
+  paint-order: stroke fill;
+  animation: splash-bounce 1s ease infinite;
+}
+:root.dark .rainbow-text {
+  --rainbow-outline: #000000;
+}
+@keyframes splash-bounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
 }
 @media (min-width: 1440px) {
   .study-panel {
