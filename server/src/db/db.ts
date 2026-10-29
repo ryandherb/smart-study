@@ -15,6 +15,7 @@ const cols = (table: string) => db.query<{ name: string }, []>(`PRAGMA table_inf
 const addColumn = (table: string, column: string, type: string) => {
   if (!cols(table).includes(column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
 };
+addColumn("sets", "source_text", "TEXT");
 addColumn("sessions", "usage", "TEXT");
 addColumn("sessions", "flow", "TEXT"); // 'topic' = per-topic conversations; null = created by the original single-conversation flow
 addColumn("topics", "notes", "TEXT");
@@ -40,3 +41,17 @@ db.exec(`CREATE TABLE IF NOT EXISTS study_time (
   elapsed_ms INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (set_id, tracker_id)
 )`);
+
+addColumn("sessions", "focus_topic_key", "TEXT");
+
+// Homework references are private; public snapshots select only revealed history.
+db.exec(`CREATE TABLE IF NOT EXISTS homework_problems (
+ id TEXT PRIMARY KEY, session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+ prompt TEXT NOT NULL, history TEXT NOT NULL DEFAULT '[]', created_at INTEGER NOT NULL,
+ solution TEXT, steps TEXT, step_index INTEGER NOT NULL DEFAULT 0
+)`);
+addColumn('homework_problems','solution','TEXT');
+addColumn('homework_problems','steps','TEXT');
+addColumn('homework_problems','step_index','INTEGER NOT NULL DEFAULT 0');
+addColumn('sets','kind',"TEXT NOT NULL DEFAULT 'study'");
+db.exec("UPDATE sets SET kind='homework' WHERE id IN (SELECT set_id FROM sessions WHERE mode='homework')");

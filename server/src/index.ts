@@ -1,3 +1,4 @@
+import { homework } from './routes/homework';
 import { Hono } from "hono";
 import { logger } from "hono/logger";
 import { sessions } from "./routes/sessions";
@@ -9,6 +10,7 @@ const app = new Hono();
 app.get("/api/providers", async (c) => c.json(await providerStatus()));
 app.use("/api/*", logger());
 app.get("/api/health", (c) => c.json({ ok: true }));
+app.route("/api/homework", homework);
 app.route("/api/sets", sets);
 app.route("/api/sessions", sessions);
 
