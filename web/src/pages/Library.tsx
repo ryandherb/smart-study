@@ -2,7 +2,7 @@ import { Recommendation } from "../components/Recommendation";
 import clsx from "clsx";
 import { FileText, GraduationCap, PencilLine, Play, Plus, RotateCcw, Trash2, UploadCloud, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button, ThemeToggle } from "../components/ui";
 import { api, MODELS, MODES, type ProviderStatus, type StudySet } from "../lib/api";
@@ -29,7 +29,9 @@ function MasteryRing({ mastered, struggled, total }: { mastered: number; struggl
   );
 }
 
-function NewSet({ onCreated, provider, ready }: { onCreated: () => void; provider: string; ready: boolean }) {
+function NewSet({ onCreated, onCancel, provider, ready, settings }: { onCreated: () => void; onCancel: () => void; provider: string; ready: boolean; settings: ReactNode }) {
+  const [step, setStep] = useState<"kind" | "material" | "settings">("kind");
+  const [kind, setKind] = useState<"general" | "homework">("general");
   const [files, setFiles] = useState<File[]>([]);
   const [source, setSource] = useState<"pdf" | "text">("pdf");
   const [sourceText, setSourceText] = useState("");
@@ -40,6 +42,7 @@ function NewSet({ onCreated, provider, ready }: { onCreated: () => void; provide
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
+  const createdSetId = useRef<string | null>(null);
   const navigate = useNavigate();
 
   const add = (list: FileList | null) => {
@@ -52,8 +55,22 @@ function NewSet({ onCreated, provider, ready }: { onCreated: () => void; provide
     setBusy(true);
     setErr(null);
     try {
-      const set = await api.createSet(source === "pdf" ? files : [], title, source === "text" ? sourceText.trim() : "");
-      const s = await api.startSession(set.id, provider === "claude" ? model || undefined : undefined, mode, provider);
+      if (kind === "homework") {
+        const response = await fetch("/api/homework", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title, provider, model: provider === "claude" ? model || undefined : undefined }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Could not create homework study set");
+        onCreated();
+        navigate(`/homework/${data.id}`);
+        return;
+      }
+      if (!createdSetId.current) {
+        const set = await api.createSet(source === "pdf" ? files : [], title, source === "text" ? sourceText.trim() : "");
+        createdSetId.current = set.id;
+      }
+      const s = await api.startSession(createdSetId.current, provider === "claude" ? model || undefined : undefined, mode, provider);
       onCreated();
       navigate(`/study/${s.id}`);
     } catch (e) {
@@ -63,7 +80,25 @@ function NewSet({ onCreated, provider, ready }: { onCreated: () => void; provide
   };
 
   return (
-    <div className="card p-6">
+    <section className="card p-6" aria-label="Create a study set" aria-busy={busy}>
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <p className="mb-1 text-xs font-medium text-accent-600">{step === "kind" ? "Step 1 · Study type" : step === "material" ? "Step 2 · Study material" : kind === "homework" ? "Step 2 · Ready to start" : "Step 3 · Ready to start"}</p>
+          <h2 className="text-xl font-semibold">{step === "kind" ? "What would you like to work on?" : step === "material" ? "What would you like to study?" : "Make it yours"}</h2>
+        </div>
+        <Button variant="ghost" size="sm" disabled={busy} onClick={onCancel} aria-label="Cancel creating study set"><X className="size-4" /></Button>
+      </div>
+      {step === "kind" && <div className="grid gap-3 sm:grid-cols-2">
+        <button className="rounded-xl border border-zinc-200 p-5 text-left transition hover:border-accent-500 hover:bg-accent-500/5 dark:border-white/10" onClick={() => { setKind("general"); setStep("material"); }}>
+          <GraduationCap className="mb-3 size-6 text-accent-500" /><span className="block font-semibold">General study</span>
+          <span className="mt-1 block text-sm text-zinc-500">Practice topics, review class material, or prepare for an exam.</span>
+        </button>
+        <button className="rounded-xl border border-zinc-200 p-5 text-left transition hover:border-accent-500 hover:bg-accent-500/5 dark:border-white/10" onClick={() => { setKind("homework"); setStep("settings"); }}>
+          <PencilLine className="mb-3 size-6 text-accent-500" /><span className="block font-semibold">Math homework</span>
+          <span className="mt-1 block text-sm text-zinc-500">Work through problems with answer checks and step-by-step help.</span>
+        </button>
+      </div>}
+      {step === "material" && <>
       <div className="mb-4 flex gap-2" role="group" aria-label="Study material source">
         <Button variant={source === "pdf" ? "primary" : "secondary"} onClick={() => setSource("pdf")} disabled={busy}><UploadCloud className="size-4" /> Upload PDFs</Button>
         <Button variant={source === "text" ? "primary" : "secondary"} onClick={() => setSource("text")} disabled={busy}><PencilLine className="size-4" /> Type topics</Button>
@@ -80,6 +115,8 @@ function NewSet({ onCreated, provider, ready }: { onCreated: () => void; provide
         onDragOver={(e) => (e.preventDefault(), setDrag(true))}
         onDragLeave={() => setDrag(false)}
         onDrop={(e) => (e.preventDefault(), setDrag(false), add(e.dataTransfer.files))}
+        role="button" tabIndex={0} aria-label="Upload PDF study material"
+        onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); input.current?.click(); } }}
         onClick={() => input.current?.click()}
         className={clsx(
           "flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed px-6 py-10 text-center transition",
@@ -97,7 +134,7 @@ function NewSet({ onCreated, provider, ready }: { onCreated: () => void; provide
       </div>}
 
       <AnimatePresence>
-        {(source === "text" || files.length > 0) && (
+        {(source === "pdf" && files.length > 0) && (
           <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="overflow-hidden">
             {source === "pdf" && <ul className="mt-4 space-y-1.5">
               {files.map((f, i) => (
@@ -111,6 +148,17 @@ function NewSet({ onCreated, provider, ready }: { onCreated: () => void; provide
                 </li>
               ))}
             </ul>}
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <div className="mt-6 flex justify-between gap-3">
+        <Button onClick={() => setStep("kind")}>Back</Button>
+        <Button variant="primary" disabled={source === "pdf" ? !files.length : !sourceText.trim()} onClick={() => setStep("settings")}>Continue</Button>
+      </div>
+      </>}
+      {step === "settings" && <>
+        <fieldset disabled={busy}>
+        <p className="mb-4 text-sm text-zinc-500">{kind === "homework" ? "Your homework set will be ready for you to add your first math problem." : source === "pdf" ? `${files.length} PDF${files.length === 1 ? "" : "s"} selected for general study.` : "Your topics will be used to build a general study set."}</p>
             <div className="mt-4 flex flex-wrap items-center gap-3">
               <input
                 aria-label="Study set name"
@@ -119,7 +167,8 @@ function NewSet({ onCreated, provider, ready }: { onCreated: () => void; provide
                 placeholder="Set name, e.g. CS 201 Midterm"
                 className="h-10 min-w-48 flex-1 rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none focus:border-accent-500 dark:border-white/10 dark:bg-zinc-950/50"
               />
-              <select
+              {kind === "general" && <select
+                aria-label="Study mode"
                 value={mode}
                 onChange={(e) => setMode(e.target.value)}
                 className="h-10 rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none dark:border-white/10 dark:bg-zinc-950/50"
@@ -130,8 +179,9 @@ function NewSet({ onCreated, provider, ready }: { onCreated: () => void; provide
                     {m.label}
                   </option>
                 ))}
-              </select>
+              </select>}
               {provider === "claude" && <select
+                aria-label="AI model"
                 value={model}
                 onChange={(e) => setModel(e.target.value)}
                 className="h-10 rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none dark:border-white/10 dark:bg-zinc-950/50"
@@ -144,21 +194,26 @@ function NewSet({ onCreated, provider, ready }: { onCreated: () => void; provide
                 ))}
               </select>
               }
-              <Button variant="primary" onClick={start} disabled={busy || !ready || (source === "text" && !sourceText.trim())}>
-                <Play className="size-4" /> {busy ? "Starting…" : "Start studying"}
+            </div>
+            <details className="mt-5 rounded-xl border border-zinc-200 p-4 dark:border-white/10" open={!ready}>
+              <summary className="cursor-pointer text-sm font-medium">AI service settings</summary>
+              <div className="mt-3">{settings}</div>
+            </details>
+            </fieldset>
+            {err && <div role="alert" className="mt-3 text-sm text-rose-500">{err}</div>}
+            <div className="mt-6 flex justify-between gap-3">
+              <Button disabled={busy} onClick={() => { setErr(null); createdSetId.current = null; setStep(kind === "homework" ? "kind" : "material"); }}>Back</Button>
+              <Button variant="primary" onClick={start} disabled={busy || !ready}>
+                <Play className="size-4" /> {busy ? "Creating…" : "Create study set & start"}
               </Button>
             </div>
-            {err && <div className="mt-3 text-sm text-rose-500">{err}</div>}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
+      </>}
+    </section>
   );
 }
 
 export default function Library() {
-  const [homeworkTitle,setHomeworkTitle]=useState('');
-  const [homeworkModel,setHomeworkModel]=useState('');
+  const [creating, setCreating] = useState(false);
   const [providers, setProviders] = useState<ProviderStatus[]>([]);
   const [provider, setProvider] = useState(() => localStorage.getItem("study-provider") ?? "claude");
   const [providerError, setProviderError] = useState("");
@@ -204,9 +259,11 @@ export default function Library() {
           <ThemeToggle />
         </header>
 
-        <section className="card mb-6 p-5" aria-label="AI service settings">
+        <section className="mb-10">
+          {creating ? <NewSet onCreated={load} onCancel={() => setCreating(false)} provider={provider} ready={ready} settings={
+        <div aria-label="AI service settings">
           <div className="flex flex-wrap items-center gap-3">
-            <label htmlFor="provider" className="text-sm font-medium">Quiz service</label>
+            <label htmlFor="provider" className="text-sm font-medium">AI service</label>
             <select id="provider" value={provider} onChange={e => {
               setProvider(e.target.value); localStorage.setItem("study-provider", e.target.value);
             }} className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-zinc-950">
@@ -217,17 +274,14 @@ export default function Library() {
           </div>
           <p className="mt-2 text-xs text-zinc-500">Used for new sessions. Existing sessions keep their service.</p>
           {providers.map(p => <p key={p.id} className="mt-1 text-xs text-zinc-500">{p.label}: {p.hint}</p>)}
-          {(providerError || sessionError) && <p role="alert" className="mt-2 text-sm text-rose-500">{providerError || sessionError}</p>}
+          {providerError && <p role="alert" className="mt-2 text-sm text-rose-500">{providerError}</p>}
+        </div>
+          } /> : <div className="card flex flex-wrap items-center justify-between gap-5 p-6">
+            <div><h2 className="text-lg font-semibold">What are you learning today?</h2><p className="mt-1 text-sm text-zinc-500">Turn your materials, topics, or homework into a study set.</p></div>
+            <Button variant="primary" onClick={() => setCreating(true)}><Plus className="size-4" /> Create a study set</Button>
+          </div>}
         </section>
-        <div className="card mb-6 p-5 flex flex-wrap gap-3"><input aria-label="Homework workspace name" placeholder="Homework workspace name" value={homeworkTitle} onChange={e=>setHomeworkTitle(e.target.value)} className="rounded-lg border bg-transparent p-2"/><select aria-label="Homework model" value={homeworkModel} onChange={e=>setHomeworkModel(e.target.value)}><option value="">Default model</option>{provider==='claude'&&MODELS.filter(m=>m.id).map(m=><option key={m.id} value={m.id}>{m.label}</option>)}</select><Button disabled={!ready} onClick={async () => {
- try { const r = await fetch('/api/homework', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({provider,title:homeworkTitle,model:provider==='claude'?homeworkModel:undefined})}); const data=await r.json(); if(!r.ok) throw new Error(data.error); navigate(`/homework/${data.id}`); } catch(e) {setSessionError((e as Error).message);}
- }}>Math homework</Button></div>
-        <section className="mb-12">
-          <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-zinc-500">
-            <Plus className="size-4" /> New study set
-          </h2>
-          <NewSet onCreated={load} provider={provider} ready={ready} />
-        </section>
+        {sessionError && <p role="alert" className="mb-4 text-sm text-rose-500">{sessionError}</p>}
 
         {sets && sets.length > 0 && (
           <section>
