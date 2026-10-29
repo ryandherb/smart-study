@@ -23,6 +23,7 @@ import {
   type StudySet,
 } from "../lib/api";
 import { formatStudyTime } from "../components/StudyTimer";
+import { splashTexts } from "../lib/constants";
 
 function MasteryRing({
   mastered,
@@ -473,8 +474,12 @@ export default function Library() {
   const ready = providers.some((p) => p.id === provider && p.available);
   const [sets, setSets] = useState<StudySet[] | null>(null);
   const navigate = useNavigate();
+  const [splashText, setSplashText] = useState<String>("");
   const load = () => api.listSets().then(setSets);
-  useEffect(() => void load(), []);
+  useEffect(() => {
+    void load()
+    setSplashText(splashTexts[Math.floor(Math.random() * splashTexts.length)])
+  }, []);
 
   const newSession = async (setId: string, mode?: string) => {
     setSessionError("");
@@ -495,10 +500,10 @@ export default function Library() {
           </div>
           <div className="flex-1">
             <h1 className="text-2xl font-semibold tracking-tight">
-              SmarStudy
+              SmartStudy
             </h1>
-            <p className="text-sm text-study-muted">
-              
+            <p className="text-sm rainbow-text">
+              {splashText}
             </p>
           </div>
           <ThemeToggle />

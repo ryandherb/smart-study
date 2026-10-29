@@ -291,6 +291,25 @@ footer {
   border-left: 1px solid var(--study-line);
   padding: 12px;
 }
+.rainbow-text {
+  font-size: 8;
+  font-weight: bold;
+  background: linear-gradient(
+    90deg,
+    #ff0000,
+    #ff7f00,
+    #ffff00,
+    #00ff00,
+    #0000ff,
+    #4b0082,
+    #8b0082
+  );
+  background-size: 50% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: bounce 1s ease infinite;
+}
 @media (min-width: 1440px) {
   .study-panel {
     position: static;

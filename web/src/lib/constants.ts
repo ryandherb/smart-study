@@ -1,0 +1,21 @@
+export const splashTexts = [
+    "100% vibe coded",
+    "Gobbling tokens since 2025",
+    "Don't quit, just postpone",
+    Math.PI.toString(), 
+    Math.E.toString(),
+    "Running at O(how fast claude can process N)",
+    "Not for ECE majors",
+    "A huge thanks to LLMs",
+    "Energy drinks are $4.00 in my residence hall. Shame.",
+    "Imagine you didn't need to study. Now forget that silly idea",
+    "If you're reading this, it may be too late",
+    "Secret splash text!",
+    "You should've taken communications",
+    "You should've taken liberal arts",
+    "Why did you take this major?",
+    "Don't look at me like that",
+    "The exam IS that hard",
+    "You are NOT that prepared",
+    "Murphy's law"
+]
