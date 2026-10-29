@@ -291,6 +291,42 @@ footer {
   border-left: 1px solid var(--study-line);
   padding: 12px;
 }
+.study-wordmark {
+  width: fit-content;
+  margin: 0 0 10px;
+  padding-right: 12px;
+  font-size: clamp(30px, 5vw, 40px);
+  font-weight: 800;
+  letter-spacing: -0.065em;
+  line-height: 1.15;
+}
+.study-wordmark-accent {
+  position: relative;
+  display: inline-block;
+  color: var(--study-accent);
+  font-style: italic;
+}
+.study-wordmark-accent::after {
+  content: "";
+  position: absolute;
+  right: -3px;
+  bottom: -4px;
+  left: 2px;
+  height: 7px;
+  border-top: 3px solid currentColor;
+  border-radius: 50%;
+  transform: rotate(-4deg);
+}
+.study-wordmark-spark {
+  position: absolute;
+  top: -5px;
+  right: -13px;
+  width: 13px;
+  height: 13px;
+}
+.study-wordmark-period {
+  color: var(--study-accent);
+}
 .rainbow-text {
   font-weight: 800;
   line-height: 1.6;

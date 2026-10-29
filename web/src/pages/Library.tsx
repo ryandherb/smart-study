@@ -1,6 +1,7 @@
 import { Recommendation } from "../components/Recommendation";
 import clsx from "clsx";
 import {
+  Book,
   FileText,
   GraduationCap,
   PencilLine,
@@ -495,12 +496,9 @@ export default function Library() {
     <div className="app-bg min-h-full">
       <div className="mx-auto max-w-5xl px-6 py-10">
         <header className="mb-10 flex items-center gap-3">
-          <div className="flex size-11 items-center justify-center rounded-lg bg-accent-500/10 border border-accent-500/30">
-            <GraduationCap className="size-6 text-accent-500" />
-          </div>
-          <div className="flex-1">
-            <h1 className="text-2xl font-semibold tracking-tight">
-              SmartStudy
+          <div className="min-w-0 flex-1">
+            <h1 className="study-wordmark" aria-label="SmartStudy">
+              <span aria-hidden="true">smart<span className="study-wordmark-accent">study<svg className="study-wordmark-spark" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0 15 9 24 12 15 15 12 24 9 15 0 12 9 9Z" /></svg></span><span className="study-wordmark-period">.</span></span>
             </h1>
             <p className="text-sm rainbow-text">
               {splashText}
@@ -585,12 +583,12 @@ export default function Library() {
 
         {sets?.length === 0 && !creating && (
           <div className="py-12 text-center">
-            <GraduationCap className="mx-auto mb-4 size-8 text-study-muted" />
+            <Book className="mx-auto mb-4 size-8 text-study-muted" />
             <h2 className="text-lg font-medium">
-              Your next chapter starts here
+              No saved study sets.
             </h2>
             <p className="mt-2 text-study-muted">
-              Create a study set to keep your materials and progress together.
+              Created study sets will display here.
             </p>
           </div>
         )}
