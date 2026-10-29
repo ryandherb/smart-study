@@ -1,3 +1,4 @@
+import { Recommendation } from "../components/Recommendation";
 import clsx from "clsx";
 import { FileText, GraduationCap, PencilLine, Play, Plus, RotateCcw, Trash2, UploadCloud, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
@@ -30,6 +31,8 @@ function MasteryRing({ mastered, struggled, total }: { mastered: number; struggl
 
 function NewSet({ onCreated, provider, ready }: { onCreated: () => void; provider: string; ready: boolean }) {
   const [files, setFiles] = useState<File[]>([]);
+  const [source, setSource] = useState<"pdf" | "text">("pdf");
+  const [sourceText, setSourceText] = useState("");
   const [title, setTitle] = useState("");
   const [model, setModel] = useState("");
   const [mode, setMode] = useState("adaptive");
@@ -49,7 +52,7 @@ function NewSet({ onCreated, provider, ready }: { onCreated: () => void; provide
     setBusy(true);
     setErr(null);
     try {
-      const set = await api.createSet(files, title);
+      const set = await api.createSet(source === "pdf" ? files : [], title, source === "text" ? sourceText.trim() : "");
       const s = await api.startSession(set.id, provider === "claude" ? model || undefined : undefined, mode, provider);
       onCreated();
       navigate(`/study/${s.id}`);
@@ -61,7 +64,19 @@ function NewSet({ onCreated, provider, ready }: { onCreated: () => void; provide
 
   return (
     <div className="card p-6">
-      <div
+      <div className="mb-4 flex gap-2" role="group" aria-label="Study material source">
+        <Button variant={source === "pdf" ? "primary" : "secondary"} onClick={() => setSource("pdf")} disabled={busy}><UploadCloud className="size-4" /> Upload PDFs</Button>
+        <Button variant={source === "text" ? "primary" : "secondary"} onClick={() => setSource("text")} disabled={busy}><PencilLine className="size-4" /> Type topics</Button>
+      </div>
+      {source === "text" ? (
+        <div>
+          <label htmlFor="study-topics" className="mb-2 block text-sm font-medium">What would you like to study?</label>
+          <textarea id="study-topics" value={sourceText} onChange={e => setSourceText(e.target.value)} maxLength={10000} rows={6}
+            placeholder={"List topics, one per line:\nRecursion\nBinary search trees\nBig-O analysis\n\nOr describe a goal: Help me learn derivatives for first-year calculus."}
+            className="w-full rounded-xl border border-zinc-200 bg-white p-3 text-sm outline-none focus:border-accent-500 dark:border-white/10 dark:bg-zinc-950/50" />
+          <p className="mt-2 text-xs text-zinc-500">Enter a topic list or describe a subject. Include your level and learning goals to tailor the study set. No PDFs needed.</p>
+        </div>
+      ) : <div
         onDragOver={(e) => (e.preventDefault(), setDrag(true))}
         onDragLeave={() => setDrag(false)}
         onDrop={(e) => (e.preventDefault(), setDrag(false), add(e.dataTransfer.files))}
@@ -79,12 +94,12 @@ function NewSet({ onCreated, provider, ready }: { onCreated: () => void; provide
         <div className="font-medium">Drop practice exams or lecture slides</div>
         <div className="mt-1 text-sm text-zinc-500">PDF files, up to 30 MB each</div>
         <input ref={input} type="file" accept="application/pdf" multiple hidden onChange={(e) => add(e.target.files)} />
-      </div>
+      </div>}
 
       <AnimatePresence>
-        {files.length > 0 && (
+        {(source === "text" || files.length > 0) && (
           <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="overflow-hidden">
-            <ul className="mt-4 space-y-1.5">
+            {source === "pdf" && <ul className="mt-4 space-y-1.5">
               {files.map((f, i) => (
                 <li key={i} className="flex items-center gap-2 rounded-lg bg-zinc-100/70 px-3 py-2 text-sm dark:bg-white/5">
                   <FileText className="size-4 text-zinc-400" />
@@ -95,9 +110,10 @@ function NewSet({ onCreated, provider, ready }: { onCreated: () => void; provide
                   </button>
                 </li>
               ))}
-            </ul>
+            </ul>}
             <div className="mt-4 flex flex-wrap items-center gap-3">
               <input
+                aria-label="Study set name"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="Set name, e.g. CS 201 Midterm"
@@ -128,7 +144,7 @@ function NewSet({ onCreated, provider, ready }: { onCreated: () => void; provide
                 ))}
               </select>
               }
-              <Button variant="primary" onClick={start} disabled={busy || !ready}>
+              <Button variant="primary" onClick={start} disabled={busy || !ready || (source === "text" && !sourceText.trim())}>
                 <Play className="size-4" /> {busy ? "Starting…" : "Start studying"}
               </Button>
             </div>
@@ -141,6 +157,8 @@ function NewSet({ onCreated, provider, ready }: { onCreated: () => void; provide
 }
 
 export default function Library() {
+  const [homeworkTitle,setHomeworkTitle]=useState('');
+  const [homeworkModel,setHomeworkModel]=useState('');
   const [providers, setProviders] = useState<ProviderStatus[]>([]);
   const [provider, setProvider] = useState(() => localStorage.getItem("study-provider") ?? "claude");
   const [providerError, setProviderError] = useState("");
@@ -201,6 +219,9 @@ export default function Library() {
           {providers.map(p => <p key={p.id} className="mt-1 text-xs text-zinc-500">{p.label}: {p.hint}</p>)}
           {(providerError || sessionError) && <p role="alert" className="mt-2 text-sm text-rose-500">{providerError || sessionError}</p>}
         </section>
+        <div className="card mb-6 p-5 flex flex-wrap gap-3"><input aria-label="Homework workspace name" placeholder="Homework workspace name" value={homeworkTitle} onChange={e=>setHomeworkTitle(e.target.value)} className="rounded-lg border bg-transparent p-2"/><select aria-label="Homework model" value={homeworkModel} onChange={e=>setHomeworkModel(e.target.value)}><option value="">Default model</option>{provider==='claude'&&MODELS.filter(m=>m.id).map(m=><option key={m.id} value={m.id}>{m.label}</option>)}</select><Button disabled={!ready} onClick={async () => {
+ try { const r = await fetch('/api/homework', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({provider,title:homeworkTitle,model:provider==='claude'?homeworkModel:undefined})}); const data=await r.json(); if(!r.ok) throw new Error(data.error); navigate(`/homework/${data.id}`); } catch(e) {setSessionError((e as Error).message);}
+ }}>Math homework</Button></div>
         <section className="mb-12">
           <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-zinc-500">
             <Plus className="size-4" /> New study set
@@ -215,6 +236,7 @@ export default function Library() {
               {sets.map((s, i) => {
                 const active = s.sessions.find((x) => x.status === "active");
                 const latest = s.sessions[0];
+                const isHomework = latest?.mode === "homework";
                 return (
                   <motion.div
                     key={s.id}
@@ -231,7 +253,7 @@ export default function Library() {
                       />
                       <div className="min-w-0 flex-1">
                         <h3 className="truncate font-semibold">{s.title}</h3>
-                        <p className="truncate text-xs text-zinc-500">{s.files.join(", ")}</p>
+                        <p className="truncate text-xs text-zinc-500">{s.files.length ? s.files.join(", ") : s.sourceText || "Text topics"}</p>
                         <p className="mt-1 text-xs text-zinc-400">
                           {s.latest?.total ? `${s.latest.total} topics · ` : ""}
                           {s.sessions.length} session{s.sessions.length === 1 ? "" : "s"}
@@ -257,9 +279,10 @@ export default function Library() {
                         <Trash2 className="size-4" />
                       </button>
                     </div>
+                    {!isHomework && <Recommendation setId={s.id} provider={provider} ready={ready} />}
                     <div className="mt-5 flex gap-2">
                       {active ? (
-                        <Button variant="primary" size="sm" onClick={() => navigate(`/study/${active.id}`)}>
+                        <Button variant="primary" size="sm" onClick={() => navigate(active.mode === "homework" ? `/homework/${active.id}` : `/study/${active.id}`)}>
                           <Play className="size-4" /> Continue
                         </Button>
                       ) : (
@@ -269,12 +292,12 @@ export default function Library() {
                           </Button>
                         )
                       )}
-                      <Button variant={active ? "secondary" : "primary"} size="sm" disabled={!ready} onClick={() => newSession(s.id)}>
+                      {!isHomework && <><Button variant={active ? "secondary" : "primary"} size="sm" disabled={!ready} onClick={() => newSession(s.id)}>
                         <RotateCcw className="size-4" /> New session
                       </Button>
                       <Button size="sm" variant="ghost" disabled={!ready} onClick={() => newSession(s.id, "exam")} title={MODES.find((m) => m.id === "exam")?.hint}>
                         <PencilLine className="size-4" /> Exam practice
-                      </Button>
+                      </Button></>}
                     </div>
                   </motion.div>
                 );

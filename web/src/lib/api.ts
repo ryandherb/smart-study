@@ -94,9 +94,10 @@ export interface StudySet {
   title: string;
   createdAt: number;
   studyTimeMs: number;
+  sourceText: string | null;
   files: string[];
   latest: { total: number; mastered: number | null; struggled: number | null } | null;
-  sessions: { id: string; status: string; created_at: number; updated_at: number; provider: "claude" | "chatgpt"; model: string | null }[];
+  sessions: { id: string; mode: string; status: string; created_at: number; updated_at: number; provider: "claude" | "chatgpt"; model: string | null }[];
 }
 
 export interface Report extends Snapshot {
@@ -148,17 +149,19 @@ export const api = {
     req<{ studyTimeMs: number }>(`/sets/${setId}/time`, {
       ...json("POST", { trackerId, elapsedMs }), keepalive: true,
     }),
-  createSet: (files: File[], title: string) => {
+  createSet: (files: File[], title: string, sourceText = "") => {
     const form = new FormData();
     files.forEach((f) => form.append("files", f));
     if (title) form.append("title", title);
+    if (sourceText) form.append("sourceText", sourceText);
     return req<{ id: string }>("/sets", { method: "POST", body: form });
   },
   deleteSet: (id: string) => req("/sets/" + id, { method: "DELETE" }),
   fileUrl: (fileId: string) => `/api/sets/files/${fileId}`,
 
-  startSession: (setId: string, model?: string, mode?: string, provider = "claude") =>
-    req<{ id: string }>("/sessions", json("POST", { setId, model, mode, provider })),
+  recommendation: (id: string) => req<{ topicKey: string; title: string; reason: string; label: string } | null>(`/sets/${id}/recommendation`),
+  startSession: (setId: string, model?: string, mode?: string, provider = "claude", focusTopicKey?: string) =>
+    req<{ id: string }>("/sessions", json("POST", { setId, model, mode, provider, focusTopicKey })),
   getSession: (id: string) => req<Snapshot>(`/sessions/${id}`),
   report: (id: string) => req<Report>(`/sessions/${id}/report`),
   answer: (id: string, questionId: string, answer: string) =>

@@ -1,3 +1,4 @@
+import { Recommendation } from "../components/Recommendation";
 import clsx from "clsx";
 import { ArrowLeft, CheckCircle2, CircleAlert, RotateCcw, XCircle } from "lucide-react";
 import { motion } from "motion/react";
@@ -76,6 +77,8 @@ export default function Summary() {
           <Stat label="Stepping-stone questions" value={scaffolds} tone="text-amber-500" />
           <Stat label="Answers graded" value={graded.length} />
         </div>
+
+        {r.status === "finished" && <Recommendation setId={r.set.id} provider={localStorage.getItem("study-provider") ?? r.provider} />}
 
         {r.summaryMd && (
           <section className="card mt-6 p-6">
