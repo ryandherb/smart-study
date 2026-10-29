@@ -1,4 +1,4 @@
-# Study Claude
+# SmartStudy
 
 An adaptive study tutor for Claude or ChatGPT subscriptions. Upload practice exams or slides (PDF) and study one question at a time. If you miss a question, the tutor offers easier stepping stone problems before returning to the original.
 

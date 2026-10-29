@@ -1,4 +1,4 @@
-# Study Codex
+# Smart Study
 
 Local study app: you upload PDFs (exams and slides), and Codex tutors you one question at a time. When you miss a question, it steps down to easier questions until you can solve the original. It runs on the user's Codex subscription through the Codex Agent SDK (`Codex` CLI login, with no API key). It uses Bun workspaces: `server/` (Hono, `bun:sqlite`) and `web/` (Vite, React, Tailwind).
 
